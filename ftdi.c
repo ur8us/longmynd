@@ -281,6 +281,29 @@ uint8_t ftdi_i2c_output(void) {
 }
 
 /* -------------------------------------------------------------------------------------------------- */
+uint8_t ftdi_i2c_probe_addr(uint8_t addr) {
+/* -------------------------------------------------------------------------------------------------- */
+/* probes an i2c address by sending only the address byte and checking for ACK                        */
+/*   addr: 8-bit i2c write address                                                                    */
+/* return: error code                                                                                 */
+/* -------------------------------------------------------------------------------------------------- */
+    uint8_t err;
+
+    err = ftdi_i2c_set_start();
+    if (err==ERROR_NONE) err = ftdi_i2c_send_byte_check_ack(addr);
+    if (err==ERROR_NONE) err = ftdi_i2c_set_stop();
+    if (err==ERROR_NONE) {
+        err = ftdi_i2c_output();
+    } else {
+        num_bytes_to_send = 0;
+        ftdi_i2c_set_stop();
+        ftdi_i2c_output();
+    }
+
+    return err;
+}
+
+/* -------------------------------------------------------------------------------------------------- */
 uint8_t ftdi_i2c_read_reg16(uint8_t addr, uint16_t reg, uint8_t *val) {
 /* -------------------------------------------------------------------------------------------------- */
 /* read an i2c 16 bit register from the nim                                                           */
@@ -397,6 +420,37 @@ uint8_t ftdi_i2c_read_reg8(uint8_t addr, uint8_t reg, uint8_t *val) {
     } while ((err!=ERROR_NONE) && (timeout!=FTDI_RDWR_TIMEOUT));
 
     if (err!=ERROR_NONE) printf("ERROR: i2c read reg8 0x%.2x, 0x%.2x\n",addr,reg);
+
+    return err;
+}
+
+/* -------------------------------------------------------------------------------------------------- */
+uint8_t ftdi_i2c_read_addr(uint8_t addr, uint8_t *val) {
+/* -------------------------------------------------------------------------------------------------- */
+/* read one byte from an i2c address without sending a register byte first                            */
+/*   addr: 8-bit i2c write address; read bit is added internally                                      */
+/*   *val: the return value for the byte we have read                                                 */
+/* return: error code                                                                                 */
+/* -------------------------------------------------------------------------------------------------- */
+    uint8_t err;
+    int i;
+    int timeout=0;
+
+    do {
+        for (i=0; i<FTDI_NUM_TRIES; i++) {
+            err =ftdi_i2c_set_start();
+            err|=ftdi_i2c_send_byte_check_ack(addr|0x01);
+            err|=ftdi_i2c_read_byte_send_nak(val);
+            err|=ftdi_i2c_set_stop();
+            err|=ftdi_i2c_output();
+            if (err==ERROR_NONE) break;
+        }
+
+        timeout++;
+
+    } while ((err!=ERROR_NONE) && (timeout!=FTDI_RDWR_TIMEOUT));
+
+    if (err!=ERROR_NONE) printf("ERROR: i2c read addr 0x%.2x\n",addr|0x01);
 
     return err;
 }
@@ -525,4 +579,3 @@ uint8_t ftdi_init(uint8_t usb_bus, uint8_t usb_addr) {
 
     return err;
 }
-

@@ -25,8 +25,16 @@
 #include "stvvglna.h"
 #include <stdint.h>
 
-#define NIM_DEMOD_ADDR 0xd2
-#define NIM_TUNER_ADDR 0xc0
+#define NIM_DEMOD_ADDR_SERIT    0xd2
+#define NIM_DEMOD_ADDR_EARDATEK_0 0xd0
+#define NIM_DEMOD_ADDR_EARDATEK_1 0xd2
+#define NIM_DEMOD_ADDR_EARDATEK_2 0xd4
+#define NIM_DEMOD_ADDR_EARDATEK_3 0xd6
+#define NIM_TUNER_ADDR_STB6100_0 0xc0
+#define NIM_TUNER_ADDR_STB6100_1 0xc2
+#define NIM_TUNER_ADDR_STB6100_2 0xc4
+#define NIM_TUNER_ADDR_STB6100_3 0xc6
+#define NIM_TUNER_ADDR NIM_TUNER_ADDR_STB6100_0
 #define NIM_LNA_0_ADDR STVVGLNA_I2C_ADDR3
 #define NIM_LNA_1_ADDR STVVGLNA_I2C_ADDR0
 
@@ -36,8 +44,15 @@
 #define NIM_INPUT_TOP    1
 #define NIM_INPUT_BOTTOM 2
 
+void nim_set_demod_addr(uint8_t);
+uint8_t nim_get_demod_addr(void);
+uint8_t nim_probe_demod_addrs(const uint8_t*, uint8_t);
+void nim_set_tuner_addr(uint8_t);
+uint8_t nim_get_tuner_addr(void);
+uint8_t nim_probe_tuner_addrs(const uint8_t*, uint8_t);
 uint8_t nim_init();
 uint8_t nim_send_d0();
+uint8_t nim_read_tuner_addr(uint8_t,  uint8_t*);
 uint8_t nim_read_tuner (uint8_t,  uint8_t*);
 uint8_t nim_write_tuner(uint8_t,  uint8_t );
 uint8_t nim_read_demod (uint16_t, uint8_t*);

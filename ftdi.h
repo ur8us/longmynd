@@ -34,7 +34,9 @@ uint8_t ftdi_write_highbyte(uint8_t, uint8_t);
 
 uint8_t ftdi_i2c_read_reg16 (uint8_t, uint16_t, uint8_t*);
 uint8_t ftdi_i2c_read_reg8  (uint8_t, uint8_t,  uint8_t*);
+uint8_t ftdi_i2c_read_addr  (uint8_t, uint8_t*);
 uint8_t ftdi_i2c_write_reg16(uint8_t, uint16_t, uint8_t );
 uint8_t ftdi_i2c_write_reg8 (uint8_t, uint8_t,  uint8_t );
+uint8_t ftdi_i2c_probe_addr(uint8_t);
 
 #endif

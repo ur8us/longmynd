@@ -66,9 +66,14 @@
 
 #define NUM_ELEMENT_STREAMS 16
 
+#define NIM_MODEL_SERIT    0
+#define NIM_MODEL_EARDATEK 1
+
 typedef struct {
     bool port_swap;
     uint8_t port;
+    uint8_t nim_model;
+    uint8_t demod;
     uint32_t freq_requested;
     uint32_t sr_requested;
     bool beep_enabled;
@@ -97,6 +102,8 @@ typedef struct {
 typedef struct {
     uint8_t state;
     uint8_t demod_state;
+    uint8_t demod;
+    uint8_t nim_model;
     bool lna_ok;
     uint16_t lna_gain;
     uint8_t power_i;
@@ -143,4 +150,3 @@ void config_set_frequency_and_symbolrate(uint32_t frequency, uint32_t symbolrate
 void config_set_lnbv(bool enabled, bool horizontal);
 
 #endif
-

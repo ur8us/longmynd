@@ -37,7 +37,9 @@
 #include "stv0910.h"
 #include "stv0910_regs.h"
 #include "stv0910_utils.h"
+#include "stv0903.h"
 #include "stv6120.h"
+#include "stb6100.h"
 #include "stvvglna.h"
 #include "nim.h"
 #include "errors.h"
@@ -182,6 +184,8 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
     /* Defaults */
     config->port_swap = false;
     config->beep_enabled = false;
+    config->nim_model = NIM_MODEL_SERIT;
+    config->demod = STV0910_DEMOD_TOP;
     config->device_usb_addr = 0;
     config->device_usb_bus = 0;
     config->ts_use_ip = false;
@@ -190,6 +194,7 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
     strcpy(config->status_fifo_path, "longmynd_main_status");
     config->polarisation_supply=false;
     char polarisation_str[8];
+    char nim_str[16];
 
     param=1;
     while (param<argc-2) {
@@ -223,6 +228,21 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
             case 'p':
                 strncpy(polarisation_str, argv[param], 8);
                 config->polarisation_supply=true;
+                break;
+            case 'N':
+                snprintf(nim_str, sizeof(nim_str), "%s", argv[param]);
+                if ((0 == strcasecmp("earda", nim_str)) ||
+                    (0 == strcasecmp("eardatek", nim_str)) ||
+                    (0 == strcasecmp("eds-4b47ff1b+", nim_str))) {
+                    config->nim_model = NIM_MODEL_EARDATEK;
+                    config->demod = STV0910_DEMOD_BOTTOM;
+                } else if (0 == strcasecmp("serit", nim_str)) {
+                    config->nim_model = NIM_MODEL_SERIT;
+                    config->demod = STV0910_DEMOD_TOP;
+                } else {
+                    err=ERROR_ARGS_INPUT;
+                    printf("ERROR: NIM model not recognised; use serit, earda, or eardatek\n");
+                }
                 break;
             case 'w':
                 config->port_swap=true;
@@ -302,6 +322,7 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
              else                     printf("              Main TS output to IP=%s:%i\n",config->ts_ip_addr,config->ts_ip_port);
              if (!config->status_use_ip)  printf("              Main Status output to FIFO=%s\n",config->status_fifo_path);
              else                     printf("              Main Status output to IP=%s:%i\n",config->status_ip_addr,config->status_ip_port);
+             printf("              NIM model=%s\n", config->nim_model == NIM_MODEL_EARDATEK ? "EARDA/Eardatek EDS-4B47FF1B+ STV0903/STB6100" : "Serit STV0910/STV6120");
              if (config->port_swap)   printf("              NIM inputs are swapped (Main now refers to BOTTOM F-Type\n");
              else                     printf("              Main refers to TOP F-Type\n");
              if (config->beep_enabled) printf("              MER Beep enabled\n");
@@ -329,55 +350,55 @@ uint8_t do_report(longmynd_status_t *status) {
     uint8_t err=ERROR_NONE;
 
     /* LNAs if present */
-    if (status->lna_ok) {
+    if (status->nim_model == NIM_MODEL_SERIT && status->lna_ok) {
         uint8_t lna_gain, lna_vgo;
         if (err==ERROR_NONE) stvvglna_read_agc(NIM_INPUT_TOP, &lna_gain, &lna_vgo);
         status->lna_gain = (lna_gain<<5) | lna_vgo;
     }
 
     /* I,Q powers */
-    if (err==ERROR_NONE) err=stv0910_read_power(STV0910_DEMOD_TOP, &status->power_i, &status->power_q);
+    if (err==ERROR_NONE) err=stv0910_read_power(status->demod, &status->power_i, &status->power_q);
 
     /* constellations */
     if (err==ERROR_NONE) {
         for (uint8_t count=0; count<NUM_CONSTELLATIONS; count++) {
-            stv0910_read_constellation(STV0910_DEMOD_TOP, &status->constellation[count][0], &status->constellation[count][1]);
+            stv0910_read_constellation(status->demod, &status->constellation[count][0], &status->constellation[count][1]);
         }
     }
     
     /* puncture rate */
-    if (err==ERROR_NONE) err=stv0910_read_puncture_rate(STV0910_DEMOD_TOP, &status->puncture_rate);
+    if (err==ERROR_NONE) err=stv0910_read_puncture_rate(status->demod, &status->puncture_rate);
 
     /* carrier frequency offset we are trying */
-    if (err==ERROR_NONE) err=stv0910_read_car_freq(STV0910_DEMOD_TOP, &status->frequency_offset);
+    if (err==ERROR_NONE) err=stv0910_read_car_freq(status->demod, &status->frequency_offset);
 
     /* symbol rate we are trying */
-    if (err==ERROR_NONE) err=stv0910_read_sr(STV0910_DEMOD_TOP, &status->symbolrate);
+    if (err==ERROR_NONE) err=stv0910_read_sr(status->demod, &status->symbolrate);
 
     /* viterbi error rate */
-    if (err==ERROR_NONE) err=stv0910_read_err_rate(STV0910_DEMOD_TOP, &status->viterbi_error_rate);
+    if (err==ERROR_NONE) err=stv0910_read_err_rate(status->demod, &status->viterbi_error_rate);
 
     /* BER */
-    if (err==ERROR_NONE) err=stv0910_read_ber(STV0910_DEMOD_TOP, &status->bit_error_rate);
+    if (err==ERROR_NONE) err=stv0910_read_ber(status->demod, &status->bit_error_rate);
 
     /* BCH Uncorrected Flag */
-    if (err==ERROR_NONE) err=stv0910_read_errors_bch_uncorrected(STV0910_DEMOD_TOP, &status->errors_bch_uncorrected);
+    if (err==ERROR_NONE) err=stv0910_read_errors_bch_uncorrected(status->demod, &status->errors_bch_uncorrected);
 
     /* BCH Error Count */
-    if (err==ERROR_NONE) err=stv0910_read_errors_bch_count(STV0910_DEMOD_TOP, &status->errors_bch_count);
+    if (err==ERROR_NONE) err=stv0910_read_errors_bch_count(status->demod, &status->errors_bch_count);
 
     /* LDPC Error Count */
-    if (err==ERROR_NONE) err=stv0910_read_errors_ldpc_count(STV0910_DEMOD_TOP, &status->errors_ldpc_count);
+    if (err==ERROR_NONE) err=stv0910_read_errors_ldpc_count(status->demod, &status->errors_ldpc_count);
 
     /* MER */
     if(status->state==STATE_DEMOD_S || status->state==STATE_DEMOD_S2) {
-        if (err==ERROR_NONE) err=stv0910_read_mer(STV0910_DEMOD_TOP, &status->modulation_error_rate);
+        if (err==ERROR_NONE) err=stv0910_read_mer(status->demod, &status->modulation_error_rate);
     } else {
         status->modulation_error_rate = 0;
     }
 
     /* MODCOD, Short Frames, Pilots */
-    if (err==ERROR_NONE) err=stv0910_read_modcod_and_type(STV0910_DEMOD_TOP, &status->modcod, &status->short_frame, &status->pilots);
+    if (err==ERROR_NONE) err=stv0910_read_modcod_and_type(status->demod, &status->modcod, &status->short_frame, &status->pilots);
     if(status->state!=STATE_DEMOD_S2) {
         /* short frames & pilots only valid for S2 DEMOD state */
         status->short_frame = 0;
@@ -402,6 +423,8 @@ void *loop_i2c(void *arg) {
 
     longmynd_config_t config_cpy;
     longmynd_status_t status_cpy;
+    memset(&status_cpy, 0, sizeof(status_cpy));
+    bool eardatek_ts_ready = false;
 
     uint64_t last_i2c_loop = timestamp_ms();
     while (*err==ERROR_NONE && *thread_vars->main_err_ptr==ERROR_NONE) {
@@ -425,15 +448,46 @@ void *loop_i2c(void *arg) {
             pthread_mutex_unlock(&thread_vars->config->mutex);
 
             status_cpy.frequency_requested = config_cpy.freq_requested;
+            status_cpy.demod = config_cpy.demod;
+            status_cpy.nim_model = config_cpy.nim_model;
+            status_cpy.lna_ok = false;
+            eardatek_ts_ready = false;
             /* init all the modules */
-            if (*err==ERROR_NONE) *err=nim_init();
-            /* we are only using the one demodulator so set the other to 0 to turn it off */
-            if (*err==ERROR_NONE) *err=stv0910_init(config_cpy.sr_requested,0);
-            /* we only use one of the tuners in STV6120 so freq for tuner 2=0 to turn it off */
-            if (*err==ERROR_NONE) *err=stv6120_init(config_cpy.freq_requested,0,config_cpy.port_swap);
-            /* we turn on the LNA we want and turn the other off (if they exist) */
-            if (*err==ERROR_NONE) *err=stvvglna_init(NIM_INPUT_TOP,    (config_cpy.port_swap) ? STVVGLNA_OFF : STVVGLNA_ON,  &status_cpy.lna_ok);
-            if (*err==ERROR_NONE) *err=stvvglna_init(NIM_INPUT_BOTTOM, (config_cpy.port_swap) ? STVVGLNA_ON  : STVVGLNA_OFF, &status_cpy.lna_ok);
+
+            if (config_cpy.nim_model == NIM_MODEL_EARDATEK) {
+                const uint8_t eardatek_addrs[] = {
+                    NIM_DEMOD_ADDR_EARDATEK_0,
+                    NIM_DEMOD_ADDR_EARDATEK_1,
+                    NIM_DEMOD_ADDR_EARDATEK_2,
+                    NIM_DEMOD_ADDR_EARDATEK_3
+                };
+                if (*err==ERROR_NONE) *err=nim_probe_demod_addrs(eardatek_addrs, sizeof(eardatek_addrs));
+                if (*err==ERROR_NONE) printf("      Status: Eardatek demod I2C address=0x%.2x\n", nim_get_demod_addr());
+                if (*err==ERROR_NONE) *err=nim_init();
+                if (*err==ERROR_NONE) *err=stv0903_init(config_cpy.sr_requested);
+                if (*err==ERROR_NONE) {
+                    const uint8_t stb6100_addrs[] = {
+                        NIM_TUNER_ADDR_STB6100_0,
+                        NIM_TUNER_ADDR_STB6100_1,
+                        NIM_TUNER_ADDR_STB6100_2,
+                        NIM_TUNER_ADDR_STB6100_3
+                    };
+                    *err=nim_probe_tuner_addrs(stb6100_addrs, sizeof(stb6100_addrs));
+                }
+                if (*err==ERROR_NONE) printf("      Status: Eardatek tuner I2C address=0x%.2x\n", nim_get_tuner_addr());
+                if (*err==ERROR_NONE) *err=stb6100_init(config_cpy.freq_requested, config_cpy.sr_requested);
+            } else {
+                nim_set_demod_addr(NIM_DEMOD_ADDR_SERIT);
+                nim_set_tuner_addr(NIM_TUNER_ADDR);
+                if (*err==ERROR_NONE) *err=nim_init();
+                /* we are only using the one demodulator so set the other to 0 to turn it off */
+                if (*err==ERROR_NONE) *err=stv0910_init(config_cpy.sr_requested,0);
+                /* we only use one of the tuners in STV6120 so freq for tuner 2=0 to turn it off */
+                if (*err==ERROR_NONE) *err=stv6120_init(config_cpy.freq_requested,0,config_cpy.port_swap);
+                /* we turn on the LNA we want and turn the other off (if they exist) */
+                if (*err==ERROR_NONE) *err=stvvglna_init(NIM_INPUT_TOP,    (config_cpy.port_swap) ? STVVGLNA_OFF : STVVGLNA_ON,  &status_cpy.lna_ok);
+                if (*err==ERROR_NONE) *err=stvvglna_init(NIM_INPUT_BOTTOM, (config_cpy.port_swap) ? STVVGLNA_ON  : STVVGLNA_OFF, &status_cpy.lna_ok);
+            }
 
             if (*err!=ERROR_NONE) printf("ERROR: failed to init a device - is the NIM powered on?\n");
 
@@ -446,7 +500,11 @@ void *loop_i2c(void *arg) {
 
             /* now start the whole thing scanning for the signal */
             if (*err==ERROR_NONE) {
-                *err=stv0910_start_scan(STV0910_DEMOD_TOP);
+                if (status_cpy.nim_model == NIM_MODEL_EARDATEK) {
+                    *err=stv0903_start_s2_scan();
+                } else {
+                    *err=stv0910_start_scan(status_cpy.demod);
+                }
                 status_cpy.state=STATE_DEMOD_HUNTING;
             }
         }
@@ -456,7 +514,7 @@ void *loop_i2c(void *arg) {
             case STATE_DEMOD_HUNTING:
                 if (*err==ERROR_NONE) *err=do_report(&status_cpy);
                 /* process state changes */
-                if (*err==ERROR_NONE) *err=stv0910_read_scan_state(STV0910_DEMOD_TOP, &status_cpy.demod_state);
+                if (*err==ERROR_NONE) *err=stv0910_read_scan_state(status_cpy.demod, &status_cpy.demod_state);
                 if (status_cpy.demod_state==DEMOD_FOUND_HEADER) {
                     status_cpy.state=STATE_DEMOD_FOUND_HEADER;
                 }
@@ -475,7 +533,7 @@ void *loop_i2c(void *arg) {
             case STATE_DEMOD_FOUND_HEADER:
                 if (*err==ERROR_NONE) *err=do_report(&status_cpy);
                 /* process state changes */
-                *err=stv0910_read_scan_state(STV0910_DEMOD_TOP, &status_cpy.demod_state);
+                *err=stv0910_read_scan_state(status_cpy.demod, &status_cpy.demod_state);
                 if (status_cpy.demod_state==DEMOD_HUNTING) {
                     status_cpy.state=STATE_DEMOD_HUNTING;
                 }
@@ -494,7 +552,7 @@ void *loop_i2c(void *arg) {
             case STATE_DEMOD_S2:
                 if (*err==ERROR_NONE) *err=do_report(&status_cpy);
                 /* process state changes */
-                *err=stv0910_read_scan_state(STV0910_DEMOD_TOP, &status_cpy.demod_state);
+                *err=stv0910_read_scan_state(status_cpy.demod, &status_cpy.demod_state);
                 if (status_cpy.demod_state==DEMOD_HUNTING) {
                     status_cpy.state=STATE_DEMOD_HUNTING;
                 }
@@ -513,7 +571,7 @@ void *loop_i2c(void *arg) {
             case STATE_DEMOD_S:
                 if (*err==ERROR_NONE) *err=do_report(&status_cpy);
                 /* process state changes */
-                *err=stv0910_read_scan_state(STV0910_DEMOD_TOP, &status_cpy.demod_state);
+                *err=stv0910_read_scan_state(status_cpy.demod, &status_cpy.demod_state);
                 if (status_cpy.demod_state==DEMOD_HUNTING) {
                     status_cpy.state=STATE_DEMOD_HUNTING;
                 }
@@ -534,12 +592,29 @@ void *loop_i2c(void *arg) {
                 break;
         }
 
+        if (*err==ERROR_NONE && status_cpy.nim_model == NIM_MODEL_EARDATEK) {
+            if (status_cpy.state==STATE_DEMOD_S) {
+                printf("      Status: Eardatek DVB-S false lock ignored; restarting DVB-S2 scan\n");
+                *err=stv0903_start_s2_scan();
+                status_cpy.state=STATE_DEMOD_HUNTING;
+                eardatek_ts_ready = false;
+            }
+            else if (status_cpy.state==STATE_DEMOD_S2) {
+                if (!eardatek_ts_ready) {
+                    *err=stv0903_s2_lock_setup();
+                    eardatek_ts_ready = true;
+                }
+            }
+        }
+
         /* Copy local status data over global object */
         pthread_mutex_lock(&status->mutex);
 
         /* Copy out other vars */
         status->state = status_cpy.state;
         status->demod_state = status_cpy.demod_state;
+        status->demod = status_cpy.demod;
+        status->nim_model = status_cpy.nim_model;
         status->lna_ok = status_cpy.lna_ok;
         status->lna_gain = status_cpy.lna_gain;
         status->power_i = status_cpy.power_i;

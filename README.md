@@ -16,6 +16,19 @@ To run longmynd without requiring root, unplug the minitiouner and then install 
 
     make
 
+## EARDA / Eardatek NIMs
+
+Older EARDA/Eardatek MiniTiouner NIMs such as the `EDS-4B47FF1B+`
+module use the STV0903 demodulator and STB6100 tuner path:
+
+    ./longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 1131500 1500
+
+`-N eardatek` is also accepted as an alias.
+
+To view the UDP transport stream locally:
+
+    vlc udp://@:10000
+
 ## Run
 
 Please refer to the longmynd manual page via:
