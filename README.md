@@ -78,6 +78,8 @@ Open the web interface:
 
     http://localhost:8080/click.html
 
+![Longmynd Clickable Spectrum](images/longmynd-click.png)
+
 to use the clickable wideband spectrum.
 
 To view the UDP transport stream locally in VLC:
@@ -100,6 +102,10 @@ C/N estimate in `dB * 10`. On the QO-100 beacon this setup now reports about
 status.
 
 ## Web Interface
+
+![Longmynd Web Interface](images/longmynd-index.png)
+
+![Longmynd Clickable Spectrum](images/longmynd-click.png)
 
 This fork includes the browser interface ported from
 [philcrump/longmynd](https://github.com/philcrump/longmynd/), another
@@ -135,6 +141,8 @@ The test harness `fake_read` or a similar process must be running to consume the
 ```
 
 A video player (e.g. VLC) must be running to consume the output of the TS FIFO. 
+
+![Longmynd Receiver](images/longmynd-recv01.png)
 
 ## Output
 
@@ -251,3 +259,4 @@ A video player (e.g. VLC) must be running to consume the output of the TS FIFO.
     GNU General Public License for more details.
     You should have received a copy of the GNU General Public License
     along with longmynd.  If not, see <https://www.gnu.org/licenses/>.
+enses/>.
