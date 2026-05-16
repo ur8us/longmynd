@@ -170,20 +170,11 @@ function longmynd_udpts(_udp_host, _udp_port)
 
 function is_valid_vlc_endpoint(_value)
 {
-  var match = _value.match(/^(?!0)(?!.*\.$)((1?\d?\d|25[0-5]|2[0-4]\d)(\.|$)){4}(?::([1-9]\d{0,4}))?$/);
-  var port;
-
+  var match = _value.match(/^((1?\d?\d|25[0-5]|2[0-4]\d)\.){3}(1?\d?\d|25[0-5]|2[0-4]\d)(:[1-9]\d{0,4})?$/);
   if(match == null)
   {
     return false;
   }
-
-  if(match[4] !== undefined)
-  {
-    port = parseInt(match[4], 10);
-    return port >= 1 && port <= 65535;
-  }
-
   return true;
 }
 
@@ -508,6 +499,7 @@ $(document).ready(function()
   $('#input-frequency-lo').val(lo_frequency);
   $('#input-vlcautoreset-enable').prop("checked", vlc_control_autoreset);
   $('#input-vlcautoreset-ip').val(vlc_control_autoreset_endpoint);
+  $('#input-vlcautoreset-ip').removeClass("is-invalid");
 
 
   $('#input-frequency-lo').keyup(function()
