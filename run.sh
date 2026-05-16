@@ -5,6 +5,12 @@ VLC_PASSWORD="longmynd"
 VLC_HTTP_PORT=8082
 LONGMYND_WEB_PORT=8080
 
+# Kill existing instances
+pkill -f "./longmynd" 2>/dev/null
+pkill -f "/snap/vlc" 2>/dev/null
+pkill vlc 2>/dev/null
+sleep 1
+
 # Run longmynd with EARDA NIM and web interface
 ./longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 -W $LONGMYND_WEB_PORT -V $VLC_PASSWORD -O $VLC_HTTP_PORT 1131500 1500 &
 

@@ -249,98 +249,99 @@ int callback_ws(struct lws *wsi, enum lws_callback_reasons reason, void *user, v
             }
             if(vhost_session->protocol->id == WS_CONTROL)
             {
-                if(len >= 2 && len < 32)
+                if(len >= 1 && len < 32)
                 {
                     char message_string[32];
                     memcpy(message_string, in, len);
                     message_string[len] = '\0';
 
-                    //printf("RX: %s\n", message_string);
-
-                    if(message_string[0] == 'C')
-                    {
-                        /* Combined Command (frequency and symbolrate) */
-                        char *field2_ptr;
-                        uint32_t freq, sr;
-
-                        /* Find field divider */
-                        field2_ptr = memchr(message_string, ',', len);
-                        if(field2_ptr != NULL)
-                        {
-                            /* Divide the strings */
-                            field2_ptr[0] = '\0';
-
-                            freq = (uint32_t)strtol(&message_string[1],NULL,10);
-                            sr = (uint32_t)strtol(&field2_ptr[1],NULL,10);
-                            config_set_frequency_and_symbolrate(freq, sr);
-                        }
-                    }
-                    else if(message_string[0] == 'F')
-                    {
-                        /* Frequency Command */
-                        uint32_t freq;
-                        freq = (uint32_t)strtol(&message_string[1],NULL,10);
-                        config_set_frequency(freq);
-                    }
-                    else if(message_string[0] == 'S')
-                    {
-                        /* Symbolrate Command */
-                        uint32_t sr;
-                        sr = (uint32_t)strtol(&message_string[1],NULL,10);
-                        config_set_symbolrate(sr);
-                    }
-                    else if(message_string[0] == 'V')
-                    {
-                        /* LNB Voltage Supply Command */
-                        char *field2_ptr;
-                        bool lnbv_enabled, lnbv_horizontal;
-
-                        /* Find field divider */
-                        field2_ptr = memchr(message_string, ',', len);
-                        if(field2_ptr != NULL)
-                        {
-                            /* Divide the strings */
-                            field2_ptr[0] = '\0';
-
-                            lnbv_enabled = (bool)!!strtol(&message_string[1],NULL,10);
-                            lnbv_horizontal = (bool)!!strtol(&field2_ptr[1],NULL,10);
-                            config_set_lnbv(lnbv_enabled, lnbv_horizontal);
-                        }
-                    }
-                    else if(message_string[0] == 'U')
-                    {
-                        /* UDP Target Command (host and port) */
-                        char *field2_ptr;
-                        char *udp_host;
-                        int udp_port;
-
-                        /* Find field divider */
-                        field2_ptr = memchr(message_string, ':', len);
-                        if(field2_ptr != NULL)
-                        {
-                            /* Divide the strings */
-                            field2_ptr[0] = '\0';
-
-                            udp_host = &message_string[1];
-                            udp_port = (int)strtol(&field2_ptr[1],NULL,10);
-
-                            config_set_udpts(udp_host, udp_port);
-                        }
-                    }
-                    else if(message_string[0] == 'T')
-                    {
-                        /* Tuner / RF Port Index Command */
-                        int rfport_index;
-
-                        rfport_index = (int)strtol(&message_string[1],NULL,10);
-                        config_set_rfport(rfport_index);
-                    }
-                    else if(message_string[0] == 'R')
+                    if(message_string[0] == 'R' && len == 1)
                     {
                         /* VLC Reset Command */
                         if(vlc_config_ptr != NULL)
                         {
                             vlc_reset_stream(vlc_config_ptr);
+                        }
+                    }
+                    else if(len >= 2)
+                    {
+                        if(message_string[0] == 'C')
+                        {
+                            /* Combined Command (frequency and symbolrate) */
+                            char *field2_ptr;
+                            uint32_t freq, sr;
+
+                            /* Find field divider */
+                            field2_ptr = memchr(message_string, ',', len);
+                            if(field2_ptr != NULL)
+                            {
+                                /* Divide the strings */
+                                field2_ptr[0] = '\0';
+
+                                freq = (uint32_t)strtol(&message_string[1],NULL,10);
+                                sr = (uint32_t)strtol(&field2_ptr[1],NULL,10);
+                                config_set_frequency_and_symbolrate(freq, sr);
+                            }
+                        }
+                        else if(message_string[0] == 'F')
+                        {
+                            /* Frequency Command */
+                            uint32_t freq;
+                            freq = (uint32_t)strtol(&message_string[1],NULL,10);
+                            config_set_frequency(freq);
+                        }
+                        else if(message_string[0] == 'S')
+                        {
+                            /* Symbolrate Command */
+                            uint32_t sr;
+                            sr = (uint32_t)strtol(&message_string[1],NULL,10);
+                            config_set_symbolrate(sr);
+                        }
+                        else if(message_string[0] == 'V')
+                        {
+                            /* LNB Voltage Supply Command */
+                            char *field2_ptr;
+                            bool lnbv_enabled, lnbv_horizontal;
+
+                            /* Find field divider */
+                            field2_ptr = memchr(message_string, ',', len);
+                            if(field2_ptr != NULL)
+                            {
+                                /* Divide the strings */
+                                field2_ptr[0] = '\0';
+
+                                lnbv_enabled = (bool)!!strtol(&message_string[1],NULL,10);
+                                lnbv_horizontal = (bool)!!strtol(&field2_ptr[1],NULL,10);
+                                config_set_lnbv(lnbv_enabled, lnbv_horizontal);
+                            }
+                        }
+                        else if(message_string[0] == 'U')
+                        {
+                            /* UDP Target Command (host and port) */
+                            char *field2_ptr;
+                            char *udp_host;
+                            int udp_port;
+
+                            /* Find field divider */
+                            field2_ptr = memchr(message_string, ':', len);
+                            if(field2_ptr != NULL)
+                            {
+                                /* Divide the strings */
+                                field2_ptr[0] = '\0';
+
+                                udp_host = &message_string[1];
+                                udp_port = (int)strtol(&field2_ptr[1],NULL,10);
+
+                                config_set_udpts(udp_host, udp_port);
+                            }
+                        }
+                        else if(message_string[0] == 'T')
+                        {
+                            /* Tuner / RF Port Index Command */
+                            int rfport_index;
+
+                            rfport_index = (int)strtol(&message_string[1],NULL,10);
+                            config_set_rfport(rfport_index);
                         }
                     }
                 }

@@ -191,36 +191,6 @@ function load_settings()
 {
   if(typeof(Storage) !== "undefined")
   {
-    var storage_vlc_control_autoreset = localStorage.getItem("longmynd-vlc-control-autoreset");
-    if(storage_vlc_control_autoreset != null)
-    {
-      try
-      {
-        var _vlc_control_autoreset = JSON.parse(storage_vlc_control_autoreset);
-        vlc_control_autoreset = _vlc_control_autoreset["enabled"];
-        if(typeof _vlc_control_autoreset["endpoint"] === "string")
-        {
-          vlc_control_autoreset_endpoint = _vlc_control_autoreset["endpoint"];
-        }
-        else if(typeof _vlc_control_autoreset["ip"] === "string")
-        {
-          vlc_control_autoreset_endpoint = _vlc_control_autoreset["ip"] + ":8080";
-        }
-
-        $("#input-vlcautoreset-enable")[0].checked = vlc_control_autoreset;
-        $("#input-vlcautoreset-ip").val(vlc_control_autoreset_endpoint);
-
-        if (vlc_control_autoreset) {
-          $('#input-vlcautoreset-ip').prop("readonly", false);
-        } else {
-          $('#input-vlcautoreset-ip').prop("readonly", true);
-        }
-      }
-      catch(e)
-      {
-        console.log("Error parsing storage_vlc_control_autoreset!", e);
-      }
-    }
     var storage_lo_frequency = localStorage.getItem("longmynd-lo-frequency");
     if(storage_lo_frequency != null)
     {
@@ -236,10 +206,25 @@ function load_settings()
       }
     }
 
+    /* VLC autoreset enabled state is saved, but endpoint is from server */
+    var storage_vlc_control_autoreset = localStorage.getItem("longmynd-vlc-control-autoreset");
+    if(storage_vlc_control_autoreset != null)
+    {
+      try
+      {
+        var _vlc_control_autoreset = JSON.parse(storage_vlc_control_autoreset);
+        vlc_control_autoreset = _vlc_control_autoreset["enabled"];
+      }
+      catch(e)
+      {
+        console.log("Error parsing storage_vlc_control_autoreset!", e);
+      }
+    }
+
     /* Save defaults even if we didn't load anything */
     save_settings();
 
-    /* Ensure readonly state matches default enabled state */
+    /* Ensure readonly state matches enabled state */
     if (vlc_control_autoreset) {
       $('#input-vlcautoreset-ip').prop("readonly", false);
     } else {
@@ -287,8 +272,8 @@ function longmynd_render_status(data_json)
       }
       if(rx_status.vlc_port !== undefined && rx_status.vlc_port > 0)
       {
-        var current_host = vlc_control_autoreset_endpoint.split(':')[0];
-        vlc_control_autoreset_endpoint = current_host + ':' + Math.round(rx_status.vlc_port);
+        vlc_control_autoreset_endpoint = '127.0.0.1:' + Math.round(rx_status.vlc_port);
+        $("#input-vlcautoreset-ip").val(vlc_control_autoreset_endpoint);
       }
 
       console.log(rx_status);
