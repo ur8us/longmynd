@@ -254,6 +254,10 @@ A video player (e.g. VLC) must be running to consume the output of the TS FIFO.
 28: 32APSK 9/10
 ```
 
+## Video
+
+[![Longmynd Demo](https://img.youtube.com/vi/YhL2G9PPtCo/0.jpg)](https://www.youtube.com/watch?v=YhL2G9PPtCo)
+
 ## License
 
     Longmynd is free software: you can redistribute it and/or modify
