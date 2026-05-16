@@ -162,17 +162,25 @@ void vlc_http_command(longmynd_config_t *config, const char *command)
 /* -------------------------------------------------------------------------------------------------- */
 void vlc_reset_stream(longmynd_config_t *config)
 /* -------------------------------------------------------------------------------------------------- */
-/* Performs a full VLC reset: stop, pl_stop, pl_clear, then re-add input. */
+/* Performs a full VLC reset: stop, delete all playlist items, then re-add input.
+   pl_empty is unreliable in some VLC versions, so we delete items by ID. */
 /* -------------------------------------------------------------------------------------------------- */
 {
     if(config->vlc_port <= 0) return;
 
     vlc_http_command(config, "stop");
-    usleep(100000);
-    vlc_http_command(config, "pl_stop");
-    usleep(100000);
-    vlc_http_command(config, "pl_clear");
-    usleep(1000000);
+    usleep(300000);
+
+    /* Delete playlist items by ID (IDs 3-100 cover typical usage) */
+    for(int id = 3; id <= 100; id++)
+    {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "pl_delete&id=%d", id);
+        vlc_http_command(config, cmd);
+        usleep(20000);
+    }
+
+    usleep(200000);
     vlc_http_command(config, "in_play&input=udp%3A%2F%2F%40%3A10000");
 }
 

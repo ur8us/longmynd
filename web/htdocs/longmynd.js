@@ -657,13 +657,9 @@ $(document).ready(function()
 });
 
 /* Override render_signal_selected_box from eshail.batc.org.uk/wb/index.js
-   to fix bug where mouse_y was used instead of mouse_clicked_y,
-   causing the selection box to disappear when the mouse moves away.
-   Also re-matches signal_selected against the current signals array
-   by frequency, since detect_signals() rebuilds the array each frame. */
+   to fix bug where mouse_y was used instead of mouse_clicked_y. */
 render_signal_selected_box = function(mouse_clicked_x, mouse_clicked_y)
 {
-  /* First check if the click hits a signal (new selection) */
   if(mouse_clicked_y < (canvasHeight * 7/8))
   {
     for(i=0; i<signals.length; i++)
@@ -694,38 +690,5 @@ render_signal_selected_box = function(mouse_clicked_x, mouse_clicked_y)
         return;
       }
     }
-  }
-
-  /* No click match — re-match existing signal_selected against current signals by frequency */
-  if(signal_selected != null && signals.length > 0)
-  {
-    for(i=0; i<signals.length; i++)
-    {
-      if(Math.abs(signals[i].frequency - signal_selected.frequency) < 0.1)
-      {
-        signal_selected = signals[i];
-        break;
-      }
-    }
-  }
-
-  if(signal_selected != null)
-  {
-    ctx.save();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = 'white';
-    ctx.beginPath();
-    ctx.moveTo(signal_selected.start, canvasHeight * (7/8));
-    ctx.lineTo(signal_selected.start, signal_selected.top);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(signal_selected.start, signal_selected.top);
-    ctx.lineTo(signal_selected.end, signal_selected.top);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(signal_selected.end, canvasHeight * (7/8));
-    ctx.lineTo(signal_selected.end, signal_selected.top);
-    ctx.stroke();
-    ctx.restore();
   }
 };

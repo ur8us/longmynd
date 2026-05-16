@@ -96,7 +96,7 @@ Pass the same password and port to LongMynd with `-V` and `-O`:
     -O <port>       VLC HTTP interface port (default: 8082)
 
 The web UI reads these values from LongMynd's status and includes the
-credentials in its VLC control requests automatically. The `run.sh` script
+credentials in its VLC control requests automatically. The `run_eardatek.sh` script
 demonstrates a working setup.
 
 QO-100 DATV band sweep scripts and example reception reports are in
