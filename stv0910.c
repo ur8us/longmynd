@@ -39,6 +39,114 @@
 /* ----------------- ROUTINES ----------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------------------------------- */
 
+typedef struct {
+    int32_t value;
+    uint32_t reg_value;
+} stv0910_snr_lookup_t;
+
+static const stv0910_snr_lookup_t stv0910_s2_snr_lookup[] = {
+    { -30, 13950 }, { -25, 13580 }, { -20, 13150 }, { -15, 12760 },
+    { -10, 12345 }, {  -5, 11900 }, {   0, 11520 }, {   5, 11080 },
+    {  10, 10630 }, {  15, 10210 }, {  20,  9790 }, {  25,  9390 },
+    {  30,  8970 }, {  35,  8575 }, {  40,  8180 }, {  45,  7800 },
+    {  50,  7430 }, {  55,  7080 }, {  60,  6720 }, {  65,  6320 },
+    {  70,  6060 }, {  75,  5760 }, {  80,  5480 }, {  85,  5200 },
+    {  90,  4930 }, {  95,  4680 }, { 100,  4425 }, { 105,  4210 },
+    { 110,  3980 }, { 115,  3765 }, { 120,  3570 }, { 125,  3315 },
+    { 130,  3140 }, { 135,  2980 }, { 140,  2820 }, { 145,  2670 },
+    { 150,  2535 }, { 160,  2270 }, { 170,  2035 }, { 180,  1825 },
+    { 190,  1650 }, { 200,  1485 }, { 210,  1340 }, { 220,  1212 },
+    { 230,  1100 }, { 240,  1000 }, { 250,   910 }, { 260,   836 },
+    { 270,   772 }, { 280,   718 }, { 290,   671 }, { 300,   635 },
+    { 310,   602 }, { 320,   575 }, { 330,   550 }, { 350,   517 },
+    { 400,   480 }, { 450,   466 }, { 500,   464 }, { 510,   463 },
+};
+
+static const stv0910_snr_lookup_t stv0910_s1_snr_lookup[] = {
+    {   0,  9242 }, {   5,  9105 }, {  10,  8950 }, {  15,  8780 },
+    {  20,  8566 }, {  25,  8366 }, {  30,  8146 }, {  35,  7908 },
+    {  40,  7666 }, {  45,  7405 }, {  50,  7136 }, {  55,  6861 },
+    {  60,  6576 }, {  65,  6330 }, {  70,  6048 }, {  75,  5768 },
+    {  80,  5492 }, {  85,  5224 }, {  90,  4959 }, {  95,  4709 },
+    { 100,  4467 }, { 105,  4236 }, { 110,  4013 }, { 115,  3800 },
+    { 120,  3598 }, { 125,  3406 }, { 130,  3225 }, { 135,  3052 },
+    { 140,  2889 }, { 145,  2733 }, { 150,  2587 }, { 160,  2318 },
+    { 170,  2077 }, { 180,  1862 }, { 190,  1670 }, { 200,  1499 },
+    { 210,  1347 }, { 220,  1213 }, { 230,  1095 }, { 240,   992 },
+    { 250,   900 }, { 260,   826 }, { 270,   758 }, { 280,   702 },
+    { 290,   653 }, { 300,   613 }, { 310,   579 }, { 320,   550 },
+    { 330,   526 }, { 350,   490 }, { 400,   445 }, { 450,   430 },
+    { 500,   426 }, { 510,   425 },
+};
+
+static int32_t stv0910_lookup_snr_x10(const stv0910_snr_lookup_t *table, uint32_t table_len, uint32_t reg_value) {
+    uint32_t min = 0;
+    uint32_t max = table_len - 1;
+
+    if (reg_value >= table[0].reg_value) {
+        return table[0].value;
+    }
+    if (reg_value <= table[max].reg_value) {
+        return table[max].value;
+    }
+
+    while ((max - min) > 1) {
+        uint32_t mid = (max + min) / 2;
+        if ((table[min].reg_value >= reg_value) && (reg_value >= table[mid].reg_value)) {
+            max = mid;
+        } else {
+            min = mid;
+        }
+    }
+
+    int32_t reg_diff = (int32_t)table[max].reg_value - (int32_t)table[min].reg_value;
+    int32_t value = table[min].value;
+    if (reg_diff != 0) {
+        value += ((int32_t)(reg_value - table[min].reg_value) * (table[max].value - table[min].value)) / reg_diff;
+    }
+    return value;
+}
+
+static uint32_t stv0910_dvbs2_nbch(uint32_t modcod, bool short_frame) {
+    static const uint32_t nbch[][2] = {
+        {    0,     0 },
+        {16200,  3240 },
+        {21600,  5400 },
+        {25920,  6480 },
+        {32400,  7200 },
+        {38880,  9720 },
+        {43200, 10800 },
+        {48600, 11880 },
+        {51840, 12600 },
+        {54000, 13320 },
+        {57600, 14400 },
+        {58320, 16000 },
+        {43200,  9720 },
+        {48600, 10800 },
+        {51840, 11880 },
+        {54000, 13320 },
+        {57600, 14400 },
+        {58320, 16000 },
+        {43200, 10800 },
+        {48600, 11880 },
+        {51840, 12600 },
+        {54000, 13320 },
+        {57600, 14400 },
+        {58320, 16000 },
+        {48600, 11880 },
+        {51840, 12600 },
+        {54000, 13320 },
+        {57600, 14400 },
+        {58320, 16000 },
+    };
+
+    if (modcod < (sizeof(nbch) / sizeof(nbch[0]))) {
+        return nbch[modcod][short_frame ? 1 : 0];
+    }
+    return 64800;
+}
+
+
 /* -------------------------------------------------------------------------------------------------- */
 uint8_t stv0910_read_car_freq(uint8_t demod, int32_t *cf) {
 /* -------------------------------------------------------------------------------------------------- */
@@ -233,10 +341,11 @@ uint8_t stv0910_read_err_rate(uint8_t demod, uint32_t *vit_errs) {
 }
 
 /* -------------------------------------------------------------------------------------------------- */
-uint8_t stv0910_read_ber(uint8_t demod, uint32_t *ber) {
+uint8_t stv0910_read_ber(uint8_t demod, bool dvbs2, uint32_t *ber) {
 /* -------------------------------------------------------------------------------------------------- */
 /* reads the number of bytes processed by the FEC, the number of error bits and then calculates BER   */
 /*    demod: STV0910_DEMOD_TOP | STV0910_DEMOD_BOTTOM: which demodulator is being read                */
+/*    dvbs2: true when reading DVB-S2 pre-BCH errors, false for legacy DVB-S FBER                     */
 /*      ber: place to store the result                                                                */
 /*   return: error state                                                                              */
 /* -------------------------------------------------------------------------------------------------- */
@@ -244,6 +353,37 @@ uint8_t stv0910_read_ber(uint8_t demod, uint32_t *ber) {
     uint8_t high, mid_u, mid_m, mid_l, low;
     double cpt;
     double errs;
+
+    if (dvbs2) {
+        uint8_t ctrl;
+        uint32_t modcod;
+        bool short_frame;
+        bool pilots;
+        uint32_t nbch;
+        uint32_t scale;
+        uint64_t denominator;
+
+                             err=stv0910_read_reg(demod==STV0910_DEMOD_TOP ? RSTV0910_P2_ERRCNT12 : RSTV0910_P1_ERRCNT12, &high);
+        if (err==ERROR_NONE) err=stv0910_read_reg(demod==STV0910_DEMOD_TOP ? RSTV0910_P2_ERRCNT11 : RSTV0910_P1_ERRCNT11, &mid_m);
+        if (err==ERROR_NONE) err=stv0910_read_reg(demod==STV0910_DEMOD_TOP ? RSTV0910_P2_ERRCNT10 : RSTV0910_P1_ERRCNT10, &low);
+        if (err==ERROR_NONE) err=stv0910_read_reg(demod==STV0910_DEMOD_TOP ? RSTV0910_P2_ERRCTRL1 : RSTV0910_P1_ERRCTRL1, &ctrl);
+        if (err==ERROR_NONE) err=stv0910_read_modcod_and_type(demod, &modcod, &short_frame, &pilots);
+
+        if (err==ERROR_NONE) {
+            errs = (double)((((uint32_t)high & 0x7f) << 16) | ((uint32_t)mid_m << 8) | (uint32_t)low);
+            nbch = stv0910_dvbs2_nbch(modcod, short_frame);
+            scale = ctrl & 0x07;
+            denominator = (uint64_t)nbch << (scale * 2);
+            if (denominator == 0) {
+                *ber = 0;
+            } else {
+                *ber=(uint32_t)((10000.0 * errs / (double)denominator) + 0.5);
+            }
+        }
+
+        if (err!=ERROR_NONE) printf("ERROR: STV0910 read DVB-S2 BER\n");
+        return err;
+    }
 
     /* first we trigger a buffer transfer and read the byte counter 40 bits */
                          err=stv0910_read_reg(demod==STV0910_DEMOD_TOP ? RSTV0910_P2_FBERCPT4 : RSTV0910_P1_FBERCPT4, &high);
@@ -268,30 +408,39 @@ uint8_t stv0910_read_ber(uint8_t demod, uint32_t *ber) {
 }
 
 /* -------------------------------------------------------------------------------------------------- */
-uint8_t stv0910_read_mer(uint8_t demod, uint32_t *mer) {
+uint8_t stv0910_read_mer(uint8_t demod, bool dvbs2, uint32_t *mer) {
 /* -------------------------------------------------------------------------------------------------- */
 /*    demod: STV0910_DEMOD_TOP | STV0910_DEMOD_BOTTOM: which demodulator is being read                */
+/*    dvbs2: true when reading DVB-S2 C/N, false for DVB-S                                             */
 /*      mer: place to store the result                                                                */
 /*   return: error state                                                                              */
 /* -------------------------------------------------------------------------------------------------- */
     uint8_t err;
     uint8_t high, low;
+    uint32_t reg_value;
+    int32_t snr_x10;
+    const stv0910_snr_lookup_t *lookup;
+    uint32_t lookup_len;
 
-                         err=stv0910_read_reg(demod==STV0910_DEMOD_TOP ? RSTV0910_P2_NOSRAMPOS : RSTV0910_P1_NOSRAMPOS, &high);
-    if (err==ERROR_NONE) err=stv0910_read_reg(demod==STV0910_DEMOD_TOP ? RSTV0910_P2_NOSRAMVAL : RSTV0910_P1_NOSRAMVAL, &low);
-    
-    if(((high >> 2) & 0x01) == 1)
-    {
-        /* Px_NOSRAM_CNRVAL is valid */
-        *mer = ((high & 0x03) << 8) | low;
-    }
-    else
-    {
-        *mer = 0;
-        if (err==ERROR_NONE) err=stv0910_write_reg_field(demod==STV0910_DEMOD_TOP ? FSTV0910_P2_NOSRAM_ACTIVATION : FSTV0910_P1_NOSRAM_ACTIVATION, 0x02);
+    if (dvbs2) {
+                             err=stv0910_read_reg(demod==STV0910_DEMOD_TOP ? RSTV0910_P2_NNOSPLHT1 : RSTV0910_P1_NNOSPLHT1, &high);
+        if (err==ERROR_NONE) err=stv0910_read_reg(demod==STV0910_DEMOD_TOP ? RSTV0910_P2_NNOSPLHT0 : RSTV0910_P1_NNOSPLHT0, &low);
+        lookup = stv0910_s2_snr_lookup;
+        lookup_len = sizeof(stv0910_s2_snr_lookup) / sizeof(stv0910_s2_snr_lookup[0]);
+    } else {
+                             err=stv0910_read_reg(demod==STV0910_DEMOD_TOP ? RSTV0910_P2_NNOSDATAT1 : RSTV0910_P1_NNOSDATAT1, &high);
+        if (err==ERROR_NONE) err=stv0910_read_reg(demod==STV0910_DEMOD_TOP ? RSTV0910_P2_NNOSDATAT0 : RSTV0910_P1_NNOSDATAT0, &low);
+        lookup = stv0910_s1_snr_lookup;
+        lookup_len = sizeof(stv0910_s1_snr_lookup) / sizeof(stv0910_s1_snr_lookup[0]);
     }
 
-    if (err!=ERROR_NONE) printf("ERROR: STV0910 read DVBS2 MER\n");
+    if (err==ERROR_NONE) {
+        reg_value = ((uint32_t)high << 8) | low;
+        snr_x10 = stv0910_lookup_snr_x10(lookup, lookup_len, reg_value);
+        *mer = snr_x10 < 0 ? 0 : (uint32_t)snr_x10;
+    }
+
+    if (err!=ERROR_NONE) printf("ERROR: STV0910 read SNR/MER\n");
 
     return err;
 }
@@ -311,7 +460,7 @@ uint8_t stv0910_read_errors_bch_uncorrected(uint8_t demod, bool *errors_bch_unco
 
     err=stv0910_read_reg_field(FSTV0910_ERRORFLAG, &result);
 
-    if(result == 0) {
+    if(result != 0) {
         *errors_bch_uncorrected = true;
     }
     else {

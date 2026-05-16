@@ -420,7 +420,7 @@ uint8_t do_report(longmynd_status_t *status) {
     if (err==ERROR_NONE) err=stv0910_read_err_rate(status->demod, &status->viterbi_error_rate);
 
     /* BER */
-    if (err==ERROR_NONE) err=stv0910_read_ber(status->demod, &status->bit_error_rate);
+    if (err==ERROR_NONE) err=stv0910_read_ber(status->demod, status->state==STATE_DEMOD_S2, &status->bit_error_rate);
 
     /* BCH Uncorrected Flag */
     if (err==ERROR_NONE) err=stv0910_read_errors_bch_uncorrected(status->demod, &status->errors_bch_uncorrected);
@@ -433,7 +433,7 @@ uint8_t do_report(longmynd_status_t *status) {
 
     /* MER */
     if(status->state==STATE_DEMOD_S || status->state==STATE_DEMOD_S2) {
-        if (err==ERROR_NONE) err=stv0910_read_mer(status->demod, &status->modulation_error_rate);
+        if (err==ERROR_NONE) err=stv0910_read_mer(status->demod, status->state==STATE_DEMOD_S2, &status->modulation_error_rate);
     } else {
         status->modulation_error_rate = 0;
     }

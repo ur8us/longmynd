@@ -42,7 +42,7 @@ If selected, this option swaps over the RF input so that the Main TS Stream is f
 Default uses the TOP RF input for the Main TS stream.
 .TP
 .BR \-b
-If selected, this option enables a tone audio output that will be present when DVB-S2 is being demodulated, and will increase in pitch for an increase in MER, to aid pointing.
+If selected, this option enables a tone audio output that will be present when DVB-S2 is being demodulated, and will increase in pitch for an increase in status 12 C/N estimate, to aid pointing.
 By default this option is disabled.
 .TP
 .BR \-p " " \fIh\fR " "| " "\-p " " \fIv\fR
@@ -63,6 +63,14 @@ specifies the starting frequency (in KHz) of the Main TS Stream search algorithm
 .TP
 .BR \fIMAIN_SR\fR
 specifies the starting Symbol Rate (in KSPS) of the Main TS Stream search algorithm".
+
+.SH NOTES
+Status ID 12 is historically named MER in LongMynd output. In this fork it is
+used for the demodulator C/N estimate in dB * 10.
+
+For the EARDA/Eardatek EDS-4B47FF1B+ path on the QO-100 beacon, recent 30
+second checks reported about 8.2 to 8.9 dB on status 12 with BCH uncorrected
+status clear.
 
 .SH EXAMPLES
 .TP

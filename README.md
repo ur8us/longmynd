@@ -36,6 +36,35 @@ With your `9360000 kHz` LO, the QO-100 beacon at `10491500 kHz` becomes:
 
     10491500 - 9360000 = 1131500 kHz
 
+### 9750 MHz vs 9360 MHz LNB PLL reference
+
+A normal Ku-band PLL LNB usually derives its `9750 MHz` low-band local
+oscillator from a `25 MHz` reference:
+
+    25 MHz * 390 = 9750 MHz
+
+That places the QO-100 beacon at:
+
+    10491.500 MHz - 9750 MHz = 741.500 MHz
+
+Some MiniTiouner NIMs can work with this lower IF. The EARDA/Eardatek
+STV0903/STB6100 NIM used here needs a higher tuner input frequency to receive
+QO-100 reliably, so this station runs the LNB PLL from `24 MHz` instead of
+`25 MHz`. The same PLL divider then gives:
+
+    24 MHz * 390 = 9360 MHz
+
+and the QO-100 beacon moves to:
+
+    10491.500 MHz - 9360 MHz = 1131.500 MHz
+
+For these experiments, a dual-connector LNB was modified in a simple way to
+allow injection of the external reference clock, with one connector used for
+the normal IF/DC path and the other used for the external clock injection. The
+clock source used was the PCS Electronics
+[OCXO for QO-100, 3x user-defined frequencies, 330 kHz to 330 MHz](https://www.pcs-electronics.com/shop/rigexpert-products/other-reu-rigexpert-products/ocxo-for-qo-100-3x-user-defined-frequencies-330khz-330mhz/),
+configured to provide the `24 MHz` LNB reference.
+
 Run the EARDA/Eardatek MiniTiouner with UDP TS output, UDP status output, and
 the web interface on port `8080`:
 
@@ -60,6 +89,15 @@ To view the UDP transport stream locally in VLC:
     vlc --network-caching=5000 udp://@:10000
 
 for 5000 ms network caching.
+
+QO-100 DATV band sweep scripts and example reception reports are in
+`QO-100-test/`. They use the same `9360000 kHz` LO by default and record
+status/C/N/error data without writing video.
+
+With the current EARDA/Eardatek status path, status ID `12` is a demodulator
+C/N estimate in `dB * 10`. On the QO-100 beacon this setup now reports about
+`8.2` to `8.9 dB` when locked cleanly, with `$23,0` for BCH uncorrected
+status.
 
 ## Web Interface
 
@@ -144,10 +182,12 @@ A video player (e.g. VLC) must be running to consume the output of the TS FIFO.
     9   Symbol Rate         During a search this is the symbol rate being trialled
                             When locked this is the symbol rate detected in the stream
     10  Viterbi Error Rate  Viterbi correction rate as a percentage * 100
-    11  BER                 Bit Error Rate as a Percentage * 100
-    12  MER                 Modulation Error Ratio in dB * 10
-    13  Service Provider    TS Service Provider Name
-    14  Service             TS Service Name
+    11  BER                 Bit Error Rate as a Percentage * 100. For DVB-S2 this is
+                            derived from the pre-BCH error counter.
+    12  MER / C/N           Demodulator C/N estimate in dB * 10. This field is
+                            historically named MER in LongMynd status output.
+    13  Service             TS Service Name
+    14  Service Provider    TS Service Provider Name
     15  Null Ratio          Ratio of Nulls in TS as percentage
     16  ES PID              Elementary Stream PID (repeated as pair with 17 for each ES)
     17  ES Type             Elementary Stream Type (repeated as pair with 16 for each ES)
