@@ -7,6 +7,7 @@ longmynd \- Outputs transport streams from the Minitiouner DVB-S/S2 demodulator
 	         [\fB\-I\fR \fISTATUS_IP_ADDR\fR  \fISTATUS_PORT\fR | \fB\-s\fR \fIMAIN_STATUS_FIFO\fR]
 	         [\fB\-N\fR \fIserit\fR | \fB\-N\fR \fIearda\fR | \fB\-N\fR \fIeardatek\fR]
 	         [\fB\-W\fR \fIWEB_PORT\fR]
+	         [\fB\-V\fR \fIVLC_PASSWORD\fR] [\fB\-O\fR \fIVLC_PORT\fR]
 	         [\fB\-w\fR] [\fB\-b\fR] [\fB\-p\fR \fIh\fR | \fB\-p\fR \fIv\fR]
       \fIMAIN_FREQ\fR \fIMAIN_SR\fR
 .IR 
@@ -58,6 +59,15 @@ Selects the NIM tuner module type.
 .BR \-W " " \fIWEB_PORT\fR
 Enables the built-in web interface on the selected TCP port.
 .TP
+.BR \-V " " \fIVLC_PASSWORD\fR
+Sets the VLC HTTP interface password. The web UI uses this to authenticate
+VLC control requests (stop/start playback when tuning). Must match the
+\-\-http\-password used when starting VLC.
+.TP
+.BR \-O " " \fIVLC_PORT\fR
+Sets the VLC HTTP interface port (default: 8082). Must match the
+\-\-http\-port used when starting VLC.
+.TP
 .BR \fIMAIN_FREQ\fR
 specifies the starting frequency (in KHz) of the Main TS Stream search algorithm".
 .TP
@@ -91,3 +101,7 @@ Uses an EARDA/Eardatek EDS-4B47FF1B+ STV0903/STB6100 NIM and sends the TS to loc
 .TP
 longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 -W 8080 1131500 1500
 As above, and serves the web interface at http://localhost:8080/.
+.TP
+longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 -W 8080 -V longmynd -O 8082 1131500 1500
+As above, with VLC HTTP control enabled. Start VLC with:
+vlc \-\-http\-password=longmynd \-\-http\-port=8082 udp://@:10000

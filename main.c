@@ -225,6 +225,8 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
     config->polarisation_supply=false;
     config->web_enabled = false;
     config->web_port = 0;
+    config->vlc_port = 8082;
+    config->vlc_password[0] = '\0';
     char polarisation_str[8];
     char nim_str[16];
 
@@ -287,6 +289,12 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
             case 'W':
                 config->web_port=(uint16_t)strtol(argv[param],NULL,10);
                 config->web_enabled=true;
+                break;
+            case 'V':
+                snprintf(config->vlc_password, sizeof(config->vlc_password), "%s", argv[param]);
+                break;
+            case 'O':
+                config->vlc_port=(int)strtol(argv[param],NULL,10);
                 break;
           }
         }
@@ -358,8 +366,9 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
              else                     printf("              Main TS output to IP=%s:%i\n",config->ts_ip_addr,config->ts_ip_port);
              if (!config->status_use_ip)  printf("              Main Status output to FIFO=%s\n",config->status_fifo_path);
              else                     printf("              Main Status output to IP=%s:%i\n",config->status_ip_addr,config->status_ip_port);
-             if (config->web_enabled)  printf("              Web interface enabled on port %i\n", config->web_port);
-             printf("              NIM model=%s\n", config->nim_model == NIM_MODEL_EARDATEK ? "EARDA/Eardatek EDS-4B47FF1B+ STV0903/STB6100" : "Serit STV0910/STV6120");
+              if (config->web_enabled)  printf("              Web interface enabled on port %i\n", config->web_port);
+              if (config->vlc_password[0] != '\0') printf("              VLC password set, HTTP port=%i\n", config->vlc_port);
+              printf("              NIM model=%s\n", config->nim_model == NIM_MODEL_EARDATEK ? "EARDA/Eardatek EDS-4B47FF1B+ STV0903/STB6100" : "Serit STV0910/STV6120");
              if (config->port_swap)   printf("              NIM inputs are swapped (Main now refers to BOTTOM F-Type\n");
              else                     printf("              Main refers to TOP F-Type\n");
              if (config->beep_enabled) printf("              MER Beep enabled\n");
@@ -488,13 +497,16 @@ void *loop_i2c(void *arg) {
             thread_vars->config->ts_reset = true;
             pthread_mutex_unlock(&thread_vars->config->mutex);
 
-            status_cpy.frequency_requested = config_cpy.freq_requested;
-            status_cpy.symbolrate_requested = config_cpy.sr_requested;
-            status_cpy.demod = config_cpy.demod;
-            status_cpy.nim_model = config_cpy.nim_model;
-            status_cpy.rfport_index = config_cpy.port_swap ? 1 : 0;
-            status_cpy.lna_ok = false;
-            eardatek_ts_ready = false;
+        status_cpy.frequency_requested = config_cpy.freq_requested;
+        status_cpy.symbolrate_requested = config_cpy.sr_requested;
+        status_cpy.demod = config_cpy.demod;
+        status_cpy.nim_model = config_cpy.nim_model;
+        status_cpy.rfport_index = config_cpy.port_swap ? 1 : 0;
+        status_cpy.lna_ok = false;
+        status_cpy.vlc_port = config_cpy.vlc_port;
+        strncpy(status_cpy.vlc_password, config_cpy.vlc_password, sizeof(status_cpy.vlc_password)-1);
+        status_cpy.vlc_password[sizeof(status_cpy.vlc_password)-1] = '\0';
+        eardatek_ts_ready = false;
             /* init all the modules */
 
             if (config_cpy.nim_model == NIM_MODEL_EARDATEK) {
@@ -682,6 +694,10 @@ void *loop_i2c(void *arg) {
         status->modcod = status_cpy.modcod;
         status->short_frame = status_cpy.short_frame;
         status->pilots = status_cpy.pilots;
+
+        strncpy(status->vlc_password, status_cpy.vlc_password, sizeof(status->vlc_password)-1);
+        status->vlc_password[sizeof(status->vlc_password)-1] = '\0';
+        status->vlc_port = status_cpy.vlc_port;
 
         /* Set monotonic value to signal new data */
         status->last_updated_monotonic = monotonic_ms();

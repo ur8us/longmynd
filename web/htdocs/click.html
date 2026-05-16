@@ -19,7 +19,7 @@
       var signals_decoded = [];
     </script>
     <script src="https://eshail.batc.org.uk/wb/index.js"></script>
-    <script src="longmynd.js?v=0"></script>
+    <script src="longmynd.js?v=1"></script>
   </head>
 	  <body class="bg-light">
 	    <div id="content" role="main">
@@ -80,8 +80,9 @@
                   </div>
                   <hr>
                   VLC Autoreset:
-                  <input type="checkbox" class="form-vlcautoreset-checkbox" id="input-vlcautoreset-enable">
-                    <input type="text" class="form-control form-control-sm" id="input-vlcautoreset-ip" placeholder="VLC Host[:Port]"><br>
+                  <input type="checkbox" class="form-vlcautoreset-checkbox" id="input-vlcautoreset-enable" checked>
+                    <input type="text" class="form-control form-control-sm" id="input-vlcautoreset-ip" placeholder="VLC Host[:Port]" value="127.0.0.1:8082">
+                  <button class="form-control form-control-sm" id="button-vlc-reset">Reset VLC</button><br>
                   TS Output:<br>
                   <input type="text" class="form-control form-control-sm" id="input-udpts-host" placeholder="TS UDP Host">
                   <input type="text" class="form-control form-control-sm" id="input-udpts-port" placeholder="TS UDP Port">

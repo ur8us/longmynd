@@ -10,6 +10,11 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h> // sleep_ms - EINTR
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <netdb.h>
 
 #define HTDOCS_DIR "./web/htdocs"
 
@@ -28,6 +33,8 @@ websocket_output_t ws_monitor_output = {
     .mutex = PTHREAD_MUTEX_INITIALIZER,
     .new = false
 };
+
+static longmynd_config_t *vlc_config_ptr = NULL;
 
 typedef struct websocket_user_session_t websocket_user_session_t;
 
@@ -66,6 +73,107 @@ void sleep_ms(uint32_t _duration)
     {
         req = rem;
     }
+}
+
+/* -------------------------------------------------------------------------------------------------- */
+void vlc_http_command(longmynd_config_t *config, const char *command)
+/* -------------------------------------------------------------------------------------------------- */
+/* Sends an HTTP command to VLC's HTTP interface from the server side.
+   This avoids CORS issues that occur when the browser tries to contact
+   VLC directly on a different port. */
+/* -------------------------------------------------------------------------------------------------- */
+{
+    if(config->vlc_port <= 0)
+    {
+        return;
+    }
+
+    struct sockaddr_in addr;
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(sock < 0) return;
+
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(config->vlc_port);
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    if(connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
+        close(sock);
+        return;
+    }
+
+    char request[512];
+    int req_len;
+    if(config->vlc_password[0] != '\0')
+    {
+        /* Build Basic auth header with base64(":password") */
+        char auth_raw[128];
+        snprintf(auth_raw, sizeof(auth_raw), ":%s", config->vlc_password);
+
+        /* Simple base64 encode */
+        static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        char auth_b64[172];
+        int i, j = 0;
+        int auth_len = strlen(auth_raw);
+        for(i = 0; i < auth_len; i += 3)
+        {
+            uint32_t n = (unsigned char)auth_raw[i] << 16;
+            if(i+1 < auth_len) n |= (unsigned char)auth_raw[i+1] << 8;
+            if(i+2 < auth_len) n |= (unsigned char)auth_raw[i+2];
+            auth_b64[j++] = b64[(n >> 18) & 0x3F];
+            auth_b64[j++] = b64[(n >> 12) & 0x3F];
+            auth_b64[j++] = (i+1 < auth_len) ? b64[(n >> 6) & 0x3F] : '=';
+            auth_b64[j++] = (i+2 < auth_len) ? b64[n & 0x3F] : '=';
+        }
+        auth_b64[j] = '\0';
+
+        req_len = snprintf(request, sizeof(request),
+            "GET /requests/status.xml?command=%s HTTP/1.0\r\n"
+            "Host: 127.0.0.1:%d\r\n"
+            "Authorization: Basic %s\r\n"
+            "\r\n",
+            command, config->vlc_port, auth_b64);
+    }
+    else
+    {
+        req_len = snprintf(request, sizeof(request),
+            "GET /requests/status.xml?command=%s HTTP/1.0\r\n"
+            "Host: 127.0.0.1:%d\r\n"
+            "\r\n",
+            command, config->vlc_port);
+    }
+
+    send(sock, request, req_len, 0);
+
+    /* Read and discard response */
+    char buf[1024];
+    while(recv(sock, buf, sizeof(buf), 0) > 0);
+
+    close(sock);
+}
+
+/* -------------------------------------------------------------------------------------------------- */
+void vlc_reset_stream(longmynd_config_t *config)
+/* -------------------------------------------------------------------------------------------------- */
+/* Performs a full VLC reset: stop, pl_stop, pl_clear, then re-add input. */
+/* -------------------------------------------------------------------------------------------------- */
+{
+    if(config->vlc_port <= 0) return;
+
+    vlc_http_command(config, "stop");
+    usleep(100000);
+    vlc_http_command(config, "pl_stop");
+    usleep(100000);
+    vlc_http_command(config, "pl_clear");
+    usleep(1000000);
+    vlc_http_command(config, "in_play&input=udp%3A%2F%2F%40%3A10000");
 }
 
 int callback_ws(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
@@ -227,6 +335,14 @@ int callback_ws(struct lws *wsi, enum lws_callback_reasons reason, void *user, v
                         rfport_index = (int)strtol(&message_string[1],NULL,10);
                         config_set_rfport(rfport_index);
                     }
+                    else if(message_string[0] == 'R')
+                    {
+                        /* VLC Reset Command */
+                        if(vlc_config_ptr != NULL)
+                        {
+                            vlc_reset_stream(vlc_config_ptr);
+                        }
+                    }
                 }
             }
             break;
@@ -350,6 +466,9 @@ static void web_status_json(char **status_string_ptr, longmynd_status_t *status,
 
     json_object_object_add(statusPacketRxObj, "ts_ip_port", json_object_new_double((double)(status_cache->ts_ip_port)));
 
+    json_object_object_add(statusPacketRxObj, "vlc_password", json_object_new_string(status_cache->vlc_password));
+    json_object_object_add(statusPacketRxObj, "vlc_port", json_object_new_double((double)(status_cache->vlc_port)));
+
 
     json_object *constellationArray = json_object_new_array();
     json_object *constellationPoint;
@@ -452,6 +571,8 @@ void *loop_web(void *arg)
     info.mounts = &mount_opts;
     info.error_document_404 = "/404.html";
     info.protocols = protocols;
+
+    vlc_config_ptr = config;
 
     if(!lws_create_vhost(context, &info))
     {

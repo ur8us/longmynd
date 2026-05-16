@@ -101,6 +101,9 @@ typedef struct {
     bool web_enabled;
     int web_port;
 
+    char vlc_password[64];
+    int vlc_port;
+
     bool new;
     pthread_mutex_t mutex;
 } longmynd_config_t;
@@ -144,6 +147,9 @@ typedef struct {
     char ts_ip_addr[16];
     int ts_ip_port;
     uint32_t ts_packet_count_nolock;
+
+    char vlc_password[64];
+    int vlc_port;
 
     uint64_t last_updated_monotonic;
     pthread_mutex_t mutex;

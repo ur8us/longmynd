@@ -68,7 +68,7 @@ configured to provide the `24 MHz` LNB reference.
 Run the EARDA/Eardatek MiniTiouner with UDP TS output, UDP status output, and
 the web interface on port `8080`:
 
-    ./longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 -W 8080 1131500 1500
+    ./longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 -W 8080 -V longmynd -O 8082 1131500 1500
 
 Open the web interface:
 
@@ -82,15 +82,22 @@ Open the web interface:
 
 to use the clickable wideband spectrum.
 
-To view the UDP transport stream locally in VLC:
+### VLC HTTP Interface
 
-    vlc udp://@:10000
+The web interface can control VLC (stop/start playback when tuning) via VLC's
+built-in HTTP interface. VLC must be started with a password and on a port that
+does not conflict with LongMynd's own web server:
 
-    - or -
+    vlc --http-password=longmynd --http-port=8082 udp://@:10000
 
-    vlc --network-caching=5000 udp://@:10000
+Pass the same password and port to LongMynd with `-V` and `-O`:
 
-for 5000 ms network caching.
+    -V <password>   VLC HTTP interface password
+    -O <port>       VLC HTTP interface port (default: 8082)
+
+The web UI reads these values from LongMynd's status and includes the
+credentials in its VLC control requests automatically. The `run.sh` script
+demonstrates a working setup.
 
 QO-100 DATV band sweep scripts and example reception reports are in
 `QO-100-test/`. They use the same `9360000 kHz` LO by default and record

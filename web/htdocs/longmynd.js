@@ -10,7 +10,8 @@ var render_busy = false;
 var render_interval = 100;
 
 var vlc_control_autoreset = true;
-var vlc_control_autoreset_endpoint = '127.0.0.1:8080';
+var vlc_control_autoreset_endpoint = '127.0.0.1:8082';
+var vlc_control_password = '';
 
 var lo_frequency = 9360000;
 
@@ -89,6 +90,16 @@ function build_vlc_control_url(_command)
   return "http://" + vlc_control_autoreset_endpoint + "/requests/status.xml?command=" + _command;
 }
 
+function vlc_ajax_headers()
+{
+  var headers = {};
+  if(vlc_control_password.length > 0)
+  {
+    headers["Authorization"] = "Basic " + btoa(":" + vlc_control_password);
+  }
+  return headers;
+}
+
 function current_vlc_udp_input()
 {
   var ts_port = 10000;
@@ -116,18 +127,10 @@ function reset_vlc_stream()
     return;
   }
 
-  $.ajax({
-    url: build_vlc_control_url("pl_stop"),
-    timeout: 500
-  });
-
-  window.setTimeout(function()
-  {
-    $.ajax({
-      url: build_vlc_control_url("in_play") + "&input=" + encodeURIComponent(current_vlc_udp_input()),
-      timeout: 500
-    });
-  }, 400);
+  /* Send reset command through LongMynd's WebSocket control channel.
+     The C code makes the HTTP requests to VLC server-side, avoiding
+     browser CORS issues. */
+  ws_control.sendMessage("R");
 }
 
 function signal_tune(_frequency, _symbolrate)
@@ -235,6 +238,13 @@ function load_settings()
 
     /* Save defaults even if we didn't load anything */
     save_settings();
+
+    /* Ensure readonly state matches default enabled state */
+    if (vlc_control_autoreset) {
+      $('#input-vlcautoreset-ip').prop("readonly", false);
+    } else {
+      $('#input-vlcautoreset-ip').prop("readonly", true);
+    }
   }
 }
 
@@ -269,6 +279,17 @@ function longmynd_render_status(data_json)
     if(status_obj != null)
     {
       rx_status = status_obj.packet.rx;
+
+      /* Read VLC config from server */
+      if(rx_status.vlc_password !== undefined && rx_status.vlc_password.length > 0)
+      {
+        vlc_control_password = rx_status.vlc_password;
+      }
+      if(rx_status.vlc_port !== undefined && rx_status.vlc_port > 0)
+      {
+        var current_host = vlc_control_autoreset_endpoint.split(':')[0];
+        vlc_control_autoreset_endpoint = current_host + ':' + Math.round(rx_status.vlc_port);
+      }
 
       console.log(rx_status);
 
@@ -500,7 +521,7 @@ $(document).ready(function()
   load_settings();
 
   $('#input-frequency-lo').val(lo_frequency);
-  $('#input-vlcautoreset').prop("checked", vlc_control_autoreset);
+  $('#input-vlcautoreset-enable').prop("checked", vlc_control_autoreset);
   $('#input-vlcautoreset-ip').val(vlc_control_autoreset_endpoint);
 
 
@@ -543,6 +564,11 @@ $(document).ready(function()
     {
       $('#input-vlcautoreset-ip').addClass("is-invalid");
     }
+  });
+
+  $('#button-vlc-reset').click(function()
+  {
+    reset_vlc_stream();
   });
 
   $('#button-tune-click').click(function()
