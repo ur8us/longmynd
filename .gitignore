@@ -5,3 +5,5 @@
 longmynd
 fake_read
 CHATHISTORY.md
+__pycache__/
+*.pyc
