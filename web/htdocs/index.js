@@ -1,7 +1,7 @@
 'use strict';
 
 const ws_url = "ws://" + window.location.hostname + ":" + window.location.port + "/";
-const QO100_LO_FREQUENCY_KHZ = 9360000;
+const DEFAULT_LO_FREQUENCY_KHZ = 9360000;
 const QO100_BEACON_FREQUENCY_KHZ = 10491500;
 const QO100_BEACON_SYMBOLRATE_KS = 1500;
 
@@ -17,9 +17,47 @@ let render_interval = 100;
 
 let rx_status = null;
 let ts_status = null;
+let lo_frequency = DEFAULT_LO_FREQUENCY_KHZ;
+let config_initialized = false;
+
+function load_settings()
+{
+  if(typeof(Storage) === "undefined")
+  {
+    return;
+  }
+
+  const storage_lo_frequency = localStorage.getItem("longmynd-lo-frequency");
+  if(storage_lo_frequency != null)
+  {
+    try
+    {
+      const stored_lo_frequency = JSON.parse(storage_lo_frequency);
+      if(!isNaN(stored_lo_frequency))
+      {
+        lo_frequency = stored_lo_frequency;
+      }
+    }
+    catch(e)
+    {
+      console.log("Error parsing storage_lo_frequency!", e);
+    }
+  }
+}
+
+function save_settings()
+{
+  if(typeof(Storage) !== "undefined")
+  {
+    localStorage.setItem("longmynd-lo-frequency", JSON.stringify(lo_frequency));
+  }
+}
 
 $(document).ready(function()
 {
+  load_settings();
+  $("#input-frequency-lo").val(lo_frequency);
+
   /* Set up configure */
   $("#submit-freq-sr").click(function(e)
   {
@@ -29,7 +67,7 @@ $(document).ready(function()
 
     if(isNaN(input_frequency_value))
     {
-      input_frequency_value = parseInt($("#input-qo100frequency").val()) - QO100_LO_FREQUENCY_KHZ;
+      input_frequency_value = parseInt($("#input-qo100frequency").val()) - lo_frequency;
     }
     let input_symbolrate_value = parseInt($("#input-symbolrate").val());
 
@@ -42,7 +80,24 @@ $(document).ready(function()
   {
     e.preventDefault();
     $("#input-qo100frequency").val(QO100_BEACON_FREQUENCY_KHZ);
+    $("#input-frequency").val("");
     $("#input-symbolrate").val(QO100_BEACON_SYMBOLRATE_KS);
+  });
+
+  $("#input-frequency-lo").keyup(function()
+  {
+    const input_lo_frequency = parseInt($("#input-frequency-lo").val(), 10);
+
+    if(!isNaN(input_lo_frequency))
+    {
+      $("#input-frequency-lo").removeClass("is-invalid");
+      lo_frequency = input_lo_frequency;
+      save_settings();
+    }
+    else
+    {
+      $("#input-frequency-lo").addClass("is-invalid");
+    }
   });
   /*
   {"type":"status","timestamp":1571256202.388,"packet":{"rx":{"demod_state":4,"frequency":742530,"symbolrate":1998138,
@@ -61,6 +116,19 @@ $(document).ready(function()
       {
         //console.log(status_obj);
         rx_status = status_obj.packet.rx;
+
+        if(!config_initialized)
+        {
+          if($("#input-frequency").val() === "")
+          {
+            $("#input-frequency").val(rx_status.frequency_requested);
+          }
+          if($("#input-symbolrate").val() === "")
+          {
+            $("#input-symbolrate").val(rx_status.symbolrate_requested);
+          }
+          config_initialized = true;
+        }
 
         let rflevel_dbm = rflevel_lookupfn(rx_status.agc1, rx_status.agc2);
         $("#valuedisplay-rflevel").text(rflevel_dbm+"dBm");

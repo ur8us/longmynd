@@ -56,36 +56,16 @@ uint8_t fifo_ts_write(uint8_t *buffer, uint32_t len) {
 /*  return: error code                                                                                */
 /* -------------------------------------------------------------------------------------------------- */
     uint8_t err=ERROR_NONE;
-    int ret;
-    int32_t remaining_len; /* note it is signed so can go negative */
-    uint32_t write_size;
+    uint32_t offset = 0;
 
-    remaining_len=len;
-    /* we need to loop round sending 510 byte chunks so that we can skip the 2 extra bytes put in by */
-    /* the FTDI chip every 512 bytes of USB message */
-    while (remaining_len>0) {
-        if (remaining_len>510) {
-             /* calculate where to start in the buffer and how many bytes to send */
-             write_size=510;
-             ret=write(fd_ts_fifo, &buffer[len-remaining_len], write_size); 
-             /* note we skip over the 2 bytes inserted by the FTDI */
-             remaining_len-=512;
-        } else {
-             write_size=remaining_len;
-             ret=write(fd_ts_fifo, &buffer[len-remaining_len], write_size);
-             remaining_len-=write_size; /* should be 0 if all went well */
-        }
-        if (ret!=(int)write_size) {
-            printf("ERROR: ts fifo write\n");
+    while (offset < len) {
+        int ret = write(fd_ts_fifo, &buffer[offset], len - offset);
+        if (ret <= 0) {
+            printf("ERROR: ts fifo write incorrect number of bytes\n");
             err=ERROR_TS_FIFO_WRITE;
             break;
         }
-    }
-
-    /* if someting went bad with our calcs, remaining will not be 0 */
-    if ((err==ERROR_NONE) && (remaining_len!=0)) {
-        printf("ERROR: ts fifo write incorrect number of bytes\n");
-        err=ERROR_TS_FIFO_WRITE;
+        offset += ret;
     }
 
     if (err!=ERROR_NONE) printf("ERROR: fifo ts write\n");
@@ -200,4 +180,3 @@ uint8_t fifo_close(bool ignore_ts_fifo) {
 
     return err;
 }
-

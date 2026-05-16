@@ -119,6 +119,7 @@ typedef struct {
     uint8_t power_q;
     uint32_t frequency_requested;
     int32_t frequency_offset;
+    uint32_t symbolrate_requested;
     bool polarisation_supply;
     bool polarisation_horizontal; // false -> 13V, true -> 18V
     uint32_t symbolrate;

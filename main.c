@@ -489,6 +489,7 @@ void *loop_i2c(void *arg) {
             pthread_mutex_unlock(&thread_vars->config->mutex);
 
             status_cpy.frequency_requested = config_cpy.freq_requested;
+            status_cpy.symbolrate_requested = config_cpy.sr_requested;
             status_cpy.demod = config_cpy.demod;
             status_cpy.nim_model = config_cpy.nim_model;
             status_cpy.rfport_index = config_cpy.port_swap ? 1 : 0;
@@ -666,6 +667,7 @@ void *loop_i2c(void *arg) {
         status->power_q = status_cpy.power_q;
         status->frequency_requested = status_cpy.frequency_requested;
         status->frequency_offset = status_cpy.frequency_offset;
+        status->symbolrate_requested = status_cpy.symbolrate_requested;
         status->polarisation_supply = status_cpy.polarisation_supply;
         status->polarisation_horizontal = status_cpy.polarisation_horizontal;
         status->symbolrate = status_cpy.symbolrate;

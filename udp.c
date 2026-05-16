@@ -48,6 +48,8 @@ struct sockaddr_in servaddr_ts;
 int sockfd_status; 
 int sockfd_ts;
 
+#define UDP_TS_CHUNK_SIZE (7 * 188)
+
 /* -------------------------------------------------------------------------------------------------- */
 /* ----------------- DEFINES ------------------------------------------------------------------------ */
 /* -------------------------------------------------------------------------------------------------- */
@@ -65,32 +67,17 @@ uint8_t udp_ts_write(uint8_t *buffer, uint32_t len) {
 /*  return: error code                                                                                */
 /* -------------------------------------------------------------------------------------------------- */
     uint8_t err=ERROR_NONE;
-    int32_t remaining_len; /* note it is signed so can go negative */
+    uint32_t offset = 0;
     uint32_t write_size;
 
-    remaining_len=len;
-    /* we need to loop round sending 510 byte chunks so that we can skip the 2 extra bytes put in by */
-    /* the FTDI chip every 512 bytes of USB message */
-    while (remaining_len>0) {
-        if (remaining_len>510) {
-             /* calculate where to start in the buffer and how many bytes to send */
-             write_size=510;
-             sendto(sockfd_ts, &buffer[len-remaining_len], write_size, 0,
-                                (const struct sockaddr *) &servaddr_ts,  sizeof(struct sockaddr)); 
-             /* note we skip over the 2 bytes inserted by the FTDI */
-             remaining_len-=512;
-        } else {
-             write_size=remaining_len;
-             sendto(sockfd_ts, &buffer[len-remaining_len], write_size, 0,
-                                (const struct sockaddr *) &servaddr_ts,  sizeof(struct sockaddr)); 
-             remaining_len-=write_size; /* should be 0 if all went well */
+    while (offset < len) {
+        write_size = (len - offset) > UDP_TS_CHUNK_SIZE ? UDP_TS_CHUNK_SIZE : (len - offset);
+        if (sendto(sockfd_ts, &buffer[offset], write_size, 0,
+                   (const struct sockaddr *) &servaddr_ts, sizeof(struct sockaddr)) < 0) {
+            err=ERROR_UDP_WRITE;
+            break;
         }
-    }
-
-    /* if someting went bad with our calcs, remaining will not be 0 */
-    if ((err==ERROR_NONE) && (remaining_len!=0)) {
-        printf("ERROR: UDP socket write incorrect number of bytes\n");
-        err=ERROR_UDP_WRITE;
+        offset += write_size;
     }
 
     if (err!=ERROR_NONE) printf("ERROR: UDP socket ts write\n");
@@ -195,4 +182,3 @@ uint8_t udp_close(void) {
 
     return err;
 }
-

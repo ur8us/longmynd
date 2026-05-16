@@ -10,9 +10,9 @@ var render_busy = false;
 var render_interval = 100;
 
 var vlc_control_autoreset = true;
-var vlc_control_autoreset_ip = '127.0.0.1';
+var vlc_control_autoreset_endpoint = '127.0.0.1:8080';
 
-var lo_frequency = 9750000;
+var lo_frequency = 9360000;
 
 var tuning_mode_scan = false;
 var scan_signals_index = 0;
@@ -79,6 +79,57 @@ var mpeg_type_lookup = {
   129: "AC3 Audio"
 }
 
+function format_frequency_mhz(_frequency_khz)
+{
+  return (_frequency_khz / 1000.0).toFixed(3) + " MHz";
+}
+
+function build_vlc_control_url(_command)
+{
+  return "http://" + vlc_control_autoreset_endpoint + "/requests/status.xml?command=" + _command;
+}
+
+function current_vlc_udp_input()
+{
+  var ts_port = 10000;
+
+  if(typeof rx_status !== "undefined" && rx_status != null && rx_status.ts_ip_port > 0)
+  {
+    ts_port = rx_status.ts_ip_port;
+  }
+  else if($("#input-udpts-port").length > 0)
+  {
+    var input_port = parseInt($("#input-udpts-port").val(), 10);
+    if(!isNaN(input_port) && input_port > 0 && input_port <= 65535)
+    {
+      ts_port = input_port;
+    }
+  }
+
+  return "udp://@:" + ts_port;
+}
+
+function reset_vlc_stream()
+{
+  if(!vlc_control_autoreset || !is_valid_vlc_endpoint(vlc_control_autoreset_endpoint))
+  {
+    return;
+  }
+
+  $.ajax({
+    url: build_vlc_control_url("pl_stop"),
+    timeout: 500
+  });
+
+  window.setTimeout(function()
+  {
+    $.ajax({
+      url: build_vlc_control_url("in_play") + "&input=" + encodeURIComponent(current_vlc_udp_input()),
+      timeout: 500
+    });
+  }, 400);
+}
+
 function signal_tune(_frequency, _symbolrate)
 {
   longmynd_tune(_frequency, _symbolrate);
@@ -89,21 +140,7 @@ function longmynd_tune(_frequency, _symbolrate)
   _frequency = (_frequency * 1000) - lo_frequency;
 
   ws_control.sendMessage("C"+_frequency+","+_symbolrate);
-
-  if(vlc_control_autoreset)
-  {
-    /* Reset locally-running VLC */
-    /* Requires configuration in VLC:
-     - 'Tools' -> 'Preferences'
-     - Select 'Show Settings' -> 'All', in bottom left.
-     - Navigate to 'Interface' -> 'Main Interfaces'
-     - Tick 'Extra Interface Modules' -> 'Web'
-     - Click 'Save' to exit
-    */
-    $.ajax({
-      url: "http://"+vlc_control_autoreset_ip+":8080/requests/status.xml?command=pl_next"
-    });
-  }
+  reset_vlc_stream();
 }
 
 function longmynd_lnbv(_enabled, _horizontal)
@@ -112,58 +149,39 @@ function longmynd_lnbv(_enabled, _horizontal)
 
   if(_enabled && vlc_control_autoreset)
   {
-    /* Reset locally-running VLC */
-    /* Requires configuration in VLC:
-     - 'Tools' -> 'Preferences'
-     - Select 'Show Settings' -> 'All', in bottom left.
-     - Navigate to 'Interface' -> 'Main Interfaces'
-     - Tick 'Extra Interface Modules' -> 'Web'
-     - Click 'Save' to exit
-    */
-    $.ajax({
-      url: "http://"+vlc_control_autoreset_ip+":8080/requests/status.xml?command=pl_next"
-    });
+    reset_vlc_stream();
   }
 }
 
 function longmynd_rfport(_rfport_index)
 {
   ws_control.sendMessage("T"+_rfport_index);
-
-  if(vlc_control_autoreset)
-  {
-    /* Reset locally-running VLC */
-    /* Requires configuration in VLC:
-     - 'Tools' -> 'Preferences'
-     - Select 'Show Settings' -> 'All', in bottom left.
-     - Navigate to 'Interface' -> 'Main Interfaces'
-     - Tick 'Extra Interface Modules' -> 'Web'
-     - Click 'Save' to exit
-    */
-    $.ajax({
-      url: "http://"+vlc_control_autoreset_ip+":8080/requests/status.xml?command=pl_next"
-    });
-  }
+  reset_vlc_stream();
 }
 
 function longmynd_udpts(_udp_host, _udp_port)
 {
   ws_control.sendMessage("U"+_udp_host+':'+_udp_port);
+  reset_vlc_stream();
+}
 
-  if(vlc_control_autoreset)
+function is_valid_vlc_endpoint(_value)
+{
+  var match = _value.match(/^(?!0)(?!.*\.$)((1?\d?\d|25[0-5]|2[0-4]\d)(\.|$)){4}(?::([1-9]\d{0,4}))?$/);
+  var port;
+
+  if(match == null)
   {
-    /* Reset locally-running VLC */
-    /* Requires configuration in VLC:
-     - 'Tools' -> 'Preferences'
-     - Select 'Show Settings' -> 'All', in bottom left.
-     - Navigate to 'Interface' -> 'Main Interfaces'
-     - Tick 'Extra Interface Modules' -> 'Web'
-     - Click 'Save' to exit
-    */
-    $.ajax({
-      url: "http://"+vlc_control_autoreset_ip+":8080/requests/status.xml?command=pl_next"
-    });
+    return false;
   }
+
+  if(match[4] !== undefined)
+  {
+    port = parseInt(match[4], 10);
+    return port >= 1 && port <= 65535;
+  }
+
+  return true;
 }
 
 function load_settings()
@@ -177,10 +195,17 @@ function load_settings()
       {
         var _vlc_control_autoreset = JSON.parse(storage_vlc_control_autoreset);
         vlc_control_autoreset = _vlc_control_autoreset["enabled"];
-        vlc_control_autoreset_ip = _vlc_control_autoreset["ip"];
+        if(typeof _vlc_control_autoreset["endpoint"] === "string")
+        {
+          vlc_control_autoreset_endpoint = _vlc_control_autoreset["endpoint"];
+        }
+        else if(typeof _vlc_control_autoreset["ip"] === "string")
+        {
+          vlc_control_autoreset_endpoint = _vlc_control_autoreset["ip"] + ":8080";
+        }
 
         $("#input-vlcautoreset-enable")[0].checked = vlc_control_autoreset;
-        $("#input-vlcautoreset-ip").val(vlc_control_autoreset_ip);
+        $("#input-vlcautoreset-ip").val(vlc_control_autoreset_endpoint);
 
         if (vlc_control_autoreset) {
           $('#input-vlcautoreset-ip').prop("readonly", false);
@@ -219,7 +244,7 @@ function save_settings()
   {
     var _vlc_control_autoreset = {
       "enabled": vlc_control_autoreset,
-      "ip": vlc_control_autoreset_ip
+      "endpoint": vlc_control_autoreset_endpoint
     };
     localStorage.setItem("longmynd-vlc-control-autoreset", JSON.stringify(_vlc_control_autoreset));
 
@@ -272,7 +297,8 @@ function longmynd_render_status(data_json)
             .text(demod_state_lookup[rx_status.demod_state]);
       }
 
-      $("#span-status-frequency").text((rx_status.frequency + lo_frequency)/1000.0 + "MHz");
+      $("#span-status-frequency").text(format_frequency_mhz(rx_status.frequency + lo_frequency));
+      $("#span-status-if-frequency").text(format_frequency_mhz((rx_status.frequency + lo_frequency) - lo_frequency));
       $("#span-status-symbolrate").text((rx_status.symbolrate / 1000.0)+"KS");
 
       if(rx_status.rfport == 0)
@@ -475,7 +501,7 @@ $(document).ready(function()
 
   $('#input-frequency-lo').val(lo_frequency);
   $('#input-vlcautoreset').prop("checked", vlc_control_autoreset);
-  $('#input-vlcautoreset-ip').val(vlc_control_autoreset_ip);
+  $('#input-vlcautoreset-ip').val(vlc_control_autoreset_endpoint);
 
 
   $('#input-frequency-lo').keyup(function()
@@ -507,10 +533,10 @@ $(document).ready(function()
 
   $('#input-vlcautoreset-ip').keyup(function()
   {
-    if(ip_address_regex.test($('#input-vlcautoreset-ip').val()))
+    if(is_valid_vlc_endpoint($('#input-vlcautoreset-ip').val()))
     {
       $('#input-vlcautoreset-ip').removeClass("is-invalid");
-      vlc_control_autoreset_ip = $('#input-vlcautoreset-ip').val();
+      vlc_control_autoreset_endpoint = $('#input-vlcautoreset-ip').val();
       save_settings();
     }
     else

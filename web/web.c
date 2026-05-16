@@ -312,12 +312,14 @@ static void web_status_json(char **status_string_ptr, longmynd_status_t *status,
     json_object_object_add(statusPacketRxObj, "agc2", json_object_new_double((double)status_cache->agc2_gain));
 
     json_object_object_add(statusPacketRxObj, "frequency", json_object_new_double((double)(status_cache->frequency_requested+(status_cache->frequency_offset/1000))));
+    json_object_object_add(statusPacketRxObj, "frequency_requested", json_object_new_double((double)status_cache->frequency_requested));
 
     json_object_object_add(statusPacketRxObj, "lnb_voltage_enabled", json_object_new_boolean(status_cache->polarisation_supply));
 
     json_object_object_add(statusPacketRxObj, "lnb_voltage_polarisation_h", json_object_new_boolean(status_cache->polarisation_horizontal));
 
     json_object_object_add(statusPacketRxObj, "symbolrate", json_object_new_double((double)status_cache->symbolrate));
+    json_object_object_add(statusPacketRxObj, "symbolrate_requested", json_object_new_double((double)status_cache->symbolrate_requested));
 
     json_object_object_add(statusPacketRxObj, "vber", json_object_new_double((double)status_cache->viterbi_error_rate));
 

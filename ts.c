@@ -31,6 +31,7 @@
 #include "ts.h"
 
 #define TS_FRAME_SIZE 20*512 // 512 is base USB FTDI frame
+#define TS_FILTER_BUFFER_SIZE (TS_FRAME_SIZE + (TS_PACKET_SIZE * 2))
 
 #define MAX_PID  8192
 
@@ -44,6 +45,7 @@
 #define TS_TABLE_PAT 0x00
 #define TS_TABLE_PMT 0x02
 #define TS_TABLE_SDT 0x42
+#define TS_LOCK_SETTLE_MS 750
 
 uint8_t *ts_buffer_ptr = NULL;
 bool ts_buffer_waiting;
@@ -79,6 +81,119 @@ static void status_set_ts_config(longmynd_status_t *status, bool ts_use_ip, cons
     pthread_mutex_unlock(&status->mutex);
 }
 
+static void status_clear_ts(longmynd_status_t *status)
+{
+    pthread_mutex_lock(&status->mutex);
+    status->service_name[0] = '\0';
+    status->service_provider_name[0] = '\0';
+    status->ts_null_percentage = 0;
+    status->ts_packet_count_nolock = 0;
+    memset(status->ts_elementary_streams, 0, sizeof(status->ts_elementary_streams));
+    pthread_mutex_unlock(&status->mutex);
+}
+
+static bool status_has_transport_lock(longmynd_status_t *status)
+{
+    bool locked;
+
+    pthread_mutex_lock(&status->mutex);
+    locked = (status->state == STATE_DEMOD_S || status->state == STATE_DEMOD_S2);
+    pthread_mutex_unlock(&status->mutex);
+
+    return locked;
+}
+
+static bool status_has_ts_metadata(longmynd_status_t *status)
+{
+    bool ready = false;
+
+    pthread_mutex_lock(&status->mutex);
+
+    if (status->service_name[0] != '\0' || status->service_provider_name[0] != '\0') {
+        ready = true;
+    } else {
+        for (int i = 0; i < NUM_ELEMENT_STREAMS; i++) {
+            if (status->ts_elementary_streams[i][0] > 0) {
+                ready = true;
+                break;
+            }
+        }
+    }
+
+    pthread_mutex_unlock(&status->mutex);
+
+    return ready;
+}
+
+static uint32_t compact_ftdi_ts_buffer(const uint8_t *input, uint32_t input_len, uint8_t *output)
+{
+    uint32_t output_len = 0;
+
+    while (input_len > 0) {
+        uint32_t copy_len = input_len > 510 ? 510 : input_len;
+
+        memcpy(&output[output_len], input, copy_len);
+        output_len += copy_len;
+        input += copy_len;
+        input_len -= copy_len;
+
+        if (input_len >= 2) {
+            input += 2;
+            input_len -= 2;
+        }
+    }
+
+    return output_len;
+}
+
+static uint32_t find_ts_sync_offset(const uint8_t *buffer, uint32_t length)
+{
+    if (length < (TS_PACKET_SIZE * 2)) {
+        return length;
+    }
+
+    for (uint32_t offset = 0; offset <= (length - (TS_PACKET_SIZE * 2)); offset++) {
+        if (buffer[offset] == TS_HEADER_SYNC
+            && buffer[offset + TS_PACKET_SIZE] == TS_HEADER_SYNC) {
+            return offset;
+        }
+    }
+
+    return length;
+}
+
+static void rewrite_ts_continuity(uint8_t *buffer, uint32_t length, uint8_t *continuity_next, bool *continuity_valid)
+{
+    for (uint32_t offset = 0; offset + TS_PACKET_SIZE <= length; offset += TS_PACKET_SIZE) {
+        uint8_t *packet = &buffer[offset];
+        uint16_t pid;
+        uint8_t adaptation_field_control;
+        uint8_t continuity_counter;
+
+        if (packet[0] != TS_HEADER_SYNC) {
+            continue;
+        }
+
+        pid = ((uint16_t)(packet[1] & 0x1F) << 8) | packet[2];
+        adaptation_field_control = (packet[3] >> 4) & 0x03;
+
+        if (adaptation_field_control == 0) {
+            continue;
+        }
+
+        if (!continuity_valid[pid]) {
+            continuity_next[pid] = 0;
+            continuity_valid[pid] = true;
+        }
+
+        continuity_counter = continuity_next[pid];
+        packet[3] = (packet[3] & 0xF0) | continuity_counter;
+
+        if (adaptation_field_control == 1 || adaptation_field_control == 3) {
+            continuity_next[pid] = (continuity_counter + 1) & 0x0F;
+        }
+    }
+}
 
 /* -------------------------------------------------------------------------------------------------- */
 void *loop_ts(void *arg) {
@@ -91,13 +206,23 @@ void *loop_ts(void *arg) {
     longmynd_status_t *status = thread_vars->status;
 
     uint8_t *buffer;
+    uint8_t *buffer_clean;
+    uint8_t *buffer_aligned;
     uint16_t len=0;
     uint8_t (*ts_write)(uint8_t*,uint32_t);
+    bool ts_wait_for_lock = true;
+    uint64_t ts_release_after_ms = 0;
+    uint8_t continuity_next[MAX_PID] = {0};
+    bool continuity_valid[MAX_PID] = {0};
+    uint8_t pending_bytes[TS_PACKET_SIZE * 2];
+    uint32_t pending_len = 0;
 
     *err=ERROR_NONE;
 
     buffer = malloc(TS_FRAME_SIZE);
-    if(buffer == NULL)
+    buffer_clean = malloc(TS_FILTER_BUFFER_SIZE);
+    buffer_aligned = malloc(TS_FILTER_BUFFER_SIZE);
+    if(buffer == NULL || buffer_clean == NULL || buffer_aligned == NULL)
     {
         *err=ERROR_TS_BUFFER_MALLOC;
     }
@@ -140,39 +265,97 @@ void *loop_ts(void *arg) {
             do {
                 if (*err==ERROR_NONE) *err=ftdi_usb_ts_read(buffer, &len, TS_FRAME_SIZE);
             } while (*err==ERROR_NONE && len>2);
-            pthread_mutex_lock(&status->mutex);
-            status->service_name[0] = '\0';
-            status->service_provider_name[0] = '\0';
-            status->ts_null_percentage = 0;
-            status->ts_packet_count_nolock = 0;
-            memset(status->ts_elementary_streams, 0, sizeof(status->ts_elementary_streams));
-            pthread_mutex_unlock(&status->mutex);
+            status_clear_ts(status);
+            ts_wait_for_lock = true;
+            ts_release_after_ms = 0;
+            pending_len = 0;
+            memset(continuity_valid, 0, sizeof(continuity_valid));
             config->ts_reset = false;
         }
 
         *err=ftdi_usb_ts_read(buffer, &len, TS_FRAME_SIZE);
 
-        /* if there is ts data then we send it out to the required output. But, we have to lose the first 2 bytes */
-        /* that are the usual FTDI 2 byte response and not part of the TS */
         if ((*err==ERROR_NONE) && (len>2)) {
-            ts_write(&buffer[2],len-2);
-            status->ts_packet_count_nolock += len-2;
+            bool transport_locked = status_has_transport_lock(status);
+            uint64_t now_ms;
+            uint32_t clean_len;
+            uint32_t aligned_len;
+            uint32_t sync_offset;
+            uint32_t output_len;
+
+            if (!transport_locked) {
+                if (!ts_wait_for_lock) {
+                    status_clear_ts(status);
+                    ts_wait_for_lock = true;
+                }
+                ts_release_after_ms = 0;
+                pending_len = 0;
+                memset(continuity_valid, 0, sizeof(continuity_valid));
+                continue;
+            }
+
+            clean_len = compact_ftdi_ts_buffer(&buffer[2], len-2, buffer_clean);
+            memcpy(buffer_aligned, pending_bytes, pending_len);
+            memcpy(&buffer_aligned[pending_len], buffer_clean, clean_len);
+            aligned_len = pending_len + clean_len;
+
+            sync_offset = find_ts_sync_offset(buffer_aligned, aligned_len);
+            if (sync_offset == aligned_len) {
+                pending_len = aligned_len > sizeof(pending_bytes) ? sizeof(pending_bytes) : aligned_len;
+                memcpy(pending_bytes, &buffer_aligned[aligned_len - pending_len], pending_len);
+                continue;
+            }
+
+            if (sync_offset > 0) {
+                memmove(buffer_aligned, &buffer_aligned[sync_offset], aligned_len - sync_offset);
+                aligned_len -= sync_offset;
+            }
+
+            output_len = aligned_len - (aligned_len % TS_PACKET_SIZE);
+            pending_len = aligned_len - output_len;
+            if (pending_len > 0) {
+                memcpy(pending_bytes, &buffer_aligned[output_len], pending_len);
+            }
+
+            if (output_len == 0) {
+                continue;
+            }
+
+            rewrite_ts_continuity(buffer_aligned, output_len, continuity_next, continuity_valid);
 
             if(longmynd_ts_parse_buffer.waiting && longmynd_ts_parse_buffer.buffer != NULL)
-            {                
+            {
                 pthread_mutex_lock(&longmynd_ts_parse_buffer.mutex);
 
-                memcpy(longmynd_ts_parse_buffer.buffer, &buffer[2],len-2);
-                longmynd_ts_parse_buffer.length = len-2;
+                memcpy(longmynd_ts_parse_buffer.buffer, buffer_aligned, output_len);
+                longmynd_ts_parse_buffer.length = output_len;
                 pthread_cond_signal(&longmynd_ts_parse_buffer.signal);
                 longmynd_ts_parse_buffer.waiting = false;
 
                 pthread_mutex_unlock(&longmynd_ts_parse_buffer.mutex);
             }
+
+            if (ts_wait_for_lock) {
+                bool transport_has_metadata = status_has_ts_metadata(status);
+                now_ms = timestamp_ms();
+                if (ts_release_after_ms == 0) {
+                    ts_release_after_ms = now_ms + TS_LOCK_SETTLE_MS;
+                }
+                if (!transport_has_metadata || now_ms < ts_release_after_ms) {
+                    continue;
+                }
+                ts_wait_for_lock = false;
+                ts_release_after_ms = 0;
+            }
+
+            ts_write(buffer_aligned, output_len);
+            status->ts_packet_count_nolock += output_len;
         }
     }
 
     free(buffer);
+    free(buffer_clean);
+    free(buffer_aligned);
 
     return NULL;
 }
@@ -248,7 +431,7 @@ void *loop_ts_parse(void *arg) {
     uint32_t service_provider_name_length;
     uint32_t service_name_length;
 
-    ts_buffer = malloc(TS_FRAME_SIZE);
+    ts_buffer = malloc(TS_FILTER_BUFFER_SIZE);
     if(ts_buffer == NULL)
     {
         *err=ERROR_TS_BUFFER_MALLOC;

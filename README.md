@@ -108,17 +108,8 @@ LongMynd fork that added a web interface.
 Builds use the `web/libwebsockets` git submodule. The normal `make` target
 initializes and builds that submodule when needed.
 
-Start longmynd with `-W <port>` and open the page in a browser:
-
-    ./longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 -W 8080 1131500 1500
-
-Then browse to:
-
-    http://localhost:8080/
-
-    - or -
-
-    http://localhost:8080/click.html
+Start longmynd with `-W <port>` and open the page in a browser. The example
+command and URLs are shown in the EARDA/Eardatek run section above.
 
 ## Run
 

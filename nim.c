@@ -336,7 +336,7 @@ uint8_t nim_init() {
     }
 
     /* we always want to start with the i2c repeater turned off */
-    if (err!=ERROR_NONE) err=nim_write_demod(0xf12a,0x38);
+    if (err==ERROR_NONE) err=nim_write_demod(0xf12a,0x38);
 
     if (err!=ERROR_NONE) printf("ERROR: nim_init\n");
 

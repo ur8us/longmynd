@@ -10,34 +10,37 @@
   <script src="lib/bootstrap-4.6.1/js/bootstrap.bundle.min.js"></script>
   <script src="/lib/strWebsocket.js?v=0"></script>
   <script src="longmynd-lookups.js?v=0"></script>
-  <script src="index.js?v=1"></script>
+  <script src="index.js?v=2"></script>
   <script src="constellation.js?v=0"></script>
  </head>
 <body>
 	    <main role="main" class="container">
 	        <center>
 	          <h1>Longmynd DVB-S/S2 DATV Receiver</h1>
-	          <a class="btn btn-secondary btn-sm" href="click.html">Open Click Page</a>
 	        </center>
 	        <div id="content-row" class="row">
 	            <div class="col-md-3">
 	                <div id="well-config" class="well well-sm">
 	                    <h3>Configuration</h3>
 	                    <p class="small text-muted">
-	                      Enter tuner IF in Frequency, e.g. 1131500. For QO-100 RF, leave Frequency blank and enter QO100 Frequency, e.g. 10491500; LO 9360000 is subtracted. Symbolrate is in KS/s.
+	                      Enter tuner IF in Frequency, e.g. 1131500. For QO-100 RF, leave Frequency blank and enter QO100 Frequency, e.g. 10491500; LO frequency is subtracted. Symbolrate is in KS/s.
 	                    </p>
 	                    <form>
                       <div class="form-group">
-                        <label for="input-frequency">Frequency (KHz)</label>
+                        <label for="input-frequency">Frequency (kHz)</label>
                         <input type="text" class="form-control" id="input-frequency" placeholder="Enter frequency">
                       </div>
                       <div class="form-group">
-                        <label for="input-frequency">QO100 Frequency (KHz)</label>
+                        <label for="input-frequency">QO100 Frequency (kHz)</label>
                         <input type="text" class="form-control" id="input-qo100frequency" placeholder="Enter frequency">
+                      </div>
+                      <div class="form-group">
+                        <label for="input-frequency-lo">LO Frequency (kHz)</label>
+                        <input type="text" class="form-control" id="input-frequency-lo" placeholder="Enter LO frequency">
                       </div>
                       <button class="btn btn-primary" id="beacon-freq-sr">[Beacon]</button>
                       <div class="form-group">
-                        <label for="input-symbolrate">Symbolrate (Ks)</label>
+                        <label for="input-symbolrate">Symbolrate (ks)</label>
                         <input type="text" class="form-control" id="input-symbolrate" placeholder="Enter symbolrate">
                       </div>
                       <button type="submit" class="btn btn-primary" id="submit-freq-sr">Submit</button>
@@ -74,6 +77,9 @@
                 </div>
             </div>
         </div>
+        <center>
+          <a class="btn btn-secondary btn-sm" href="click.html">Open Click Page</a>
+        </center>
     </main>
 
 </body>
