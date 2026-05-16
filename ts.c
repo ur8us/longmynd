@@ -20,6 +20,7 @@
 */
 
 #include <string.h>
+#include <stdlib.h>
 
 #include "main.h"
 #include "errors.h"
@@ -64,6 +65,21 @@ static longmynd_ts_parse_buffer_t longmynd_ts_parse_buffer = {
 };
 
 
+static void status_set_ts_config(longmynd_status_t *status, bool ts_use_ip, const char *fifo_path, const char *ip_addr, int ip_port)
+{
+    pthread_mutex_lock(&status->mutex);
+
+    status->ts_use_ip = ts_use_ip;
+    strncpy(status->ts_fifo_path, fifo_path, sizeof(status->ts_fifo_path)-1);
+    status->ts_fifo_path[sizeof(status->ts_fifo_path)-1] = '\0';
+    strncpy(status->ts_ip_addr, ip_addr, sizeof(status->ts_ip_addr)-1);
+    status->ts_ip_addr[sizeof(status->ts_ip_addr)-1] = '\0';
+    status->ts_ip_port = ip_port;
+
+    pthread_mutex_unlock(&status->mutex);
+}
+
+
 /* -------------------------------------------------------------------------------------------------- */
 void *loop_ts(void *arg) {
 /* -------------------------------------------------------------------------------------------------- */
@@ -72,6 +88,7 @@ void *loop_ts(void *arg) {
     thread_vars_t *thread_vars=(thread_vars_t *)arg;
     uint8_t *err = &thread_vars->thread_err;
     longmynd_config_t *config = thread_vars->config;
+    longmynd_status_t *status = thread_vars->status;
 
     uint8_t *buffer;
     uint16_t len=0;
@@ -92,14 +109,45 @@ void *loop_ts(void *arg) {
         *err=fifo_ts_init(thread_vars->config->ts_fifo_path);
         ts_write = fifo_ts_write;
     }
+    status_set_ts_config(status, config->ts_use_ip, config->ts_fifo_path, config->ts_ip_addr, config->ts_ip_port);
 
     while(*err == ERROR_NONE && *thread_vars->main_err_ptr == ERROR_NONE){
+        if(config->ts_config_new) {
+            bool ts_use_ip;
+            char ts_fifo_path[128];
+            char ts_ip_addr[16];
+            int ts_ip_port;
+
+            pthread_mutex_lock(&config->mutex);
+            ts_use_ip = config->ts_use_ip;
+            strncpy(ts_fifo_path, config->ts_fifo_path, sizeof(ts_fifo_path)-1);
+            ts_fifo_path[sizeof(ts_fifo_path)-1] = '\0';
+            strncpy(ts_ip_addr, config->ts_ip_addr, sizeof(ts_ip_addr)-1);
+            ts_ip_addr[sizeof(ts_ip_addr)-1] = '\0';
+            ts_ip_port = config->ts_ip_port;
+            config->ts_config_new = false;
+            pthread_mutex_unlock(&config->mutex);
+
+            if(ts_use_ip) {
+                *err=udp_ts_init(ts_ip_addr, ts_ip_port);
+                ts_write = udp_ts_write;
+            }
+            status_set_ts_config(status, ts_use_ip, ts_fifo_path, ts_ip_addr, ts_ip_port);
+        }
+
         /* If reset flag is active (eg. just started or changed station), then clear out the ts buffer */
         if(config->ts_reset) {
             do {
                 if (*err==ERROR_NONE) *err=ftdi_usb_ts_read(buffer, &len, TS_FRAME_SIZE);
             } while (*err==ERROR_NONE && len>2);
-           config->ts_reset = false; 
+            pthread_mutex_lock(&status->mutex);
+            status->service_name[0] = '\0';
+            status->service_provider_name[0] = '\0';
+            status->ts_null_percentage = 0;
+            status->ts_packet_count_nolock = 0;
+            memset(status->ts_elementary_streams, 0, sizeof(status->ts_elementary_streams));
+            pthread_mutex_unlock(&status->mutex);
+            config->ts_reset = false;
         }
 
         *err=ftdi_usb_ts_read(buffer, &len, TS_FRAME_SIZE);
@@ -108,6 +156,7 @@ void *loop_ts(void *arg) {
         /* that are the usual FTDI 2 byte response and not part of the TS */
         if ((*err==ERROR_NONE) && (len>2)) {
             ts_write(&buffer[2],len-2);
+            status->ts_packet_count_nolock += len-2;
 
             if(longmynd_ts_parse_buffer.waiting && longmynd_ts_parse_buffer.buffer != NULL)
             {                

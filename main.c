@@ -48,6 +48,7 @@
 #include "udp.h"
 #include "beep.h"
 #include "ts.h"
+#include "web/web.h"
 
 /* -------------------------------------------------------------------------------------------------- */
 /* ----------------- DEFINES ------------------------------------------------------------------------ */
@@ -77,6 +78,7 @@ static pthread_t thread_ts_parse;
 static pthread_t thread_ts;
 static pthread_t thread_i2c;
 static pthread_t thread_beep;
+static pthread_t thread_web;
 
 /* -------------------------------------------------------------------------------------------------- */
 /* ----------------- ROUTINES ----------------------------------------------------------------------- */
@@ -150,6 +152,33 @@ void config_set_lnbv(bool enabled, bool horizontal)
     pthread_mutex_unlock(&longmynd_config.mutex);
 }
 
+void config_set_udpts(char *udp_host, int udp_port)
+{
+    pthread_mutex_lock(&longmynd_config.mutex);
+
+    longmynd_config.ts_use_ip = true;
+    strncpy(longmynd_config.ts_ip_addr, udp_host, sizeof(longmynd_config.ts_ip_addr)-1);
+    longmynd_config.ts_ip_addr[sizeof(longmynd_config.ts_ip_addr)-1] = '\0';
+    longmynd_config.ts_ip_port = udp_port;
+    longmynd_config.ts_config_new = true;
+
+    pthread_mutex_unlock(&longmynd_config.mutex);
+}
+
+void config_set_rfport(int rfport_index)
+{
+    pthread_mutex_lock(&longmynd_config.mutex);
+
+    if (rfport_index == 0) {
+        longmynd_config.port_swap = false;
+    } else if (rfport_index == 1) {
+        longmynd_config.port_swap = true;
+    }
+    longmynd_config.new = true;
+
+    pthread_mutex_unlock(&longmynd_config.mutex);
+}
+
 /* -------------------------------------------------------------------------------------------------- */
 uint64_t monotonic_ms(void) {
 /* -------------------------------------------------------------------------------------------------- */
@@ -189,10 +218,13 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
     config->device_usb_addr = 0;
     config->device_usb_bus = 0;
     config->ts_use_ip = false;
+    config->ts_config_new = false;
     strcpy(config->ts_fifo_path, "longmynd_main_ts");
     config->status_use_ip = false;
     strcpy(config->status_fifo_path, "longmynd_main_status");
     config->polarisation_supply=false;
+    config->web_enabled = false;
+    config->web_port = 0;
     char polarisation_str[8];
     char nim_str[16];
 
@@ -206,27 +238,27 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
                 main_usb_set=true;
                 break;
             case 'i':
-                strncpy(config->ts_ip_addr,argv[param++], 16);
+                snprintf(config->ts_ip_addr, sizeof(config->ts_ip_addr), "%s", argv[param++]);
                 config->ts_ip_port=(uint16_t)strtol(argv[param],NULL,10);
                 config->ts_use_ip=true;
                 ts_ip_set = true;
                 break;
             case 't':
-                strncpy(config->status_fifo_path, argv[param], 128);
+                snprintf(config->ts_fifo_path, sizeof(config->ts_fifo_path), "%s", argv[param]);
                 ts_fifo_set=true;
                 break;
             case 'I':
-                strncpy(config->status_ip_addr,argv[param++], 16);
+                snprintf(config->status_ip_addr, sizeof(config->status_ip_addr), "%s", argv[param++]);
                 config->status_ip_port=(uint16_t)strtol(argv[param],NULL,10);
                 config->status_use_ip=true;
                 status_ip_set = true;
                 break;
             case 's':
-                strncpy(config->status_fifo_path, argv[param], 128);
+                snprintf(config->status_fifo_path, sizeof(config->status_fifo_path), "%s", argv[param]);
                 status_fifo_set=true;
                 break;
             case 'p':
-                strncpy(polarisation_str, argv[param], 8);
+                snprintf(polarisation_str, sizeof(polarisation_str), "%s", argv[param]);
                 config->polarisation_supply=true;
                 break;
             case 'N':
@@ -251,6 +283,10 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
             case 'b':
                 config->beep_enabled=true;
                 param--; /* there is no data for this so go back */
+                break;
+            case 'W':
+                config->web_port=(uint16_t)strtol(argv[param],NULL,10);
+                config->web_enabled=true;
                 break;
           }
         }
@@ -322,6 +358,7 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
              else                     printf("              Main TS output to IP=%s:%i\n",config->ts_ip_addr,config->ts_ip_port);
              if (!config->status_use_ip)  printf("              Main Status output to FIFO=%s\n",config->status_fifo_path);
              else                     printf("              Main Status output to IP=%s:%i\n",config->status_ip_addr,config->status_ip_port);
+             if (config->web_enabled)  printf("              Web interface enabled on port %i\n", config->web_port);
              printf("              NIM model=%s\n", config->nim_model == NIM_MODEL_EARDATEK ? "EARDA/Eardatek EDS-4B47FF1B+ STV0903/STB6100" : "Serit STV0910/STV6120");
              if (config->port_swap)   printf("              NIM inputs are swapped (Main now refers to BOTTOM F-Type\n");
              else                     printf("              Main refers to TOP F-Type\n");
@@ -355,6 +392,10 @@ uint8_t do_report(longmynd_status_t *status) {
         if (err==ERROR_NONE) stvvglna_read_agc(NIM_INPUT_TOP, &lna_gain, &lna_vgo);
         status->lna_gain = (lna_gain<<5) | lna_vgo;
     }
+
+    /* Demodulator AGC gains */
+    if (err==ERROR_NONE) err=stv0910_read_agc1_gain(status->demod, &status->agc1_gain);
+    if (err==ERROR_NONE) err=stv0910_read_agc2_gain(status->demod, &status->agc2_gain);
 
     /* I,Q powers */
     if (err==ERROR_NONE) err=stv0910_read_power(status->demod, &status->power_i, &status->power_q);
@@ -450,6 +491,7 @@ void *loop_i2c(void *arg) {
             status_cpy.frequency_requested = config_cpy.freq_requested;
             status_cpy.demod = config_cpy.demod;
             status_cpy.nim_model = config_cpy.nim_model;
+            status_cpy.rfport_index = config_cpy.port_swap ? 1 : 0;
             status_cpy.lna_ok = false;
             eardatek_ts_ready = false;
             /* init all the modules */
@@ -615,8 +657,11 @@ void *loop_i2c(void *arg) {
         status->demod_state = status_cpy.demod_state;
         status->demod = status_cpy.demod;
         status->nim_model = status_cpy.nim_model;
+        status->rfport_index = status_cpy.rfport_index;
         status->lna_ok = status_cpy.lna_ok;
         status->lna_gain = status_cpy.lna_gain;
+        status->agc1_gain = status_cpy.agc1_gain;
+        status->agc2_gain = status_cpy.agc2_gain;
         status->power_i = status_cpy.power_i;
         status->power_q = status_cpy.power_q;
         status->frequency_requested = status_cpy.frequency_requested;
@@ -661,6 +706,9 @@ uint8_t status_all_write(longmynd_status_t *status, uint8_t (*status_write)(uint
     if (status->lna_ok) {
         if (err==ERROR_NONE) err=status_write(STATUS_LNA_GAIN,status->lna_gain);
     }
+    /* AGC gains */
+    if (err==ERROR_NONE) err=status_write(STATUS_AGC1_GAIN, status->agc1_gain);
+    if (err==ERROR_NONE) err=status_write(STATUS_AGC2_GAIN, status->agc2_gain);
     /* I,Q powers */
     if (err==ERROR_NONE) err=status_write(STATUS_POWER_I, status->power_i);
     if (err==ERROR_NONE) err=status_write(STATUS_POWER_Q, status->power_q);
@@ -808,6 +856,27 @@ int main(int argc, char *argv[]) {
         pthread_setname_np(thread_beep, "Beep Audio");
     }
 
+    thread_vars_t thread_vars_web = {
+        .main_err_ptr = &err,
+        .thread_err = ERROR_NONE,
+        .config = &longmynd_config,
+        .status = &longmynd_status
+    };
+    bool web_thread_started = false;
+
+    if(longmynd_config.web_enabled)
+    {
+        if(0 != pthread_create(&thread_web, NULL, loop_web, (void *)&thread_vars_web))
+        {
+            fprintf(stderr, "Error creating loop_web pthread\n");
+        }
+        else
+        {
+            pthread_setname_np(thread_web, "Web Server");
+            web_thread_started = true;
+        }
+    }
+
     uint64_t last_status_sent_monotonic = 0;
     longmynd_status_t longmynd_status_cpy;
 
@@ -835,6 +904,7 @@ int main(int argc, char *argv[]) {
             (thread_vars_ts.thread_err!=ERROR_NONE
             || thread_vars_ts_parse.thread_err!=ERROR_NONE
             || thread_vars_beep.thread_err!=ERROR_NONE
+            || (longmynd_config.web_enabled && thread_vars_web.thread_err!=ERROR_NONE)
             || thread_vars_i2c.thread_err!=ERROR_NONE)) {
             err=ERROR_THREAD_ERROR;
         }
@@ -845,6 +915,10 @@ int main(int argc, char *argv[]) {
     pthread_join(thread_ts, NULL);
     pthread_join(thread_i2c, NULL);
     pthread_join(thread_beep, NULL);
+    if(web_thread_started)
+    {
+        pthread_join(thread_web, NULL);
+    }
 
     return err;
 }

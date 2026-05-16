@@ -60,6 +60,8 @@
 #define STATUS_ERRORS_BCH_UNCORRECTED   23
 #define STATUS_LNB_SUPPLY         24
 #define STATUS_LNB_POLARISATION_H 25
+#define STATUS_AGC1_GAIN          26
+#define STATUS_AGC2_GAIN          27
 
 /* The number of constellation peeks we do for each background loop */
 #define NUM_CONSTELLATIONS 16
@@ -86,6 +88,7 @@ typedef struct {
     char ts_fifo_path[128];
     char ts_ip_addr[16];
     int ts_ip_port;
+    bool ts_config_new;
 
     bool status_use_ip;
     char status_fifo_path[128];
@@ -94,6 +97,9 @@ typedef struct {
 
     bool polarisation_supply;
     bool polarisation_horizontal; // false -> 13V, true -> 18V
+
+    bool web_enabled;
+    int web_port;
 
     bool new;
     pthread_mutex_t mutex;
@@ -104,8 +110,11 @@ typedef struct {
     uint8_t demod_state;
     uint8_t demod;
     uint8_t nim_model;
+    uint8_t rfport_index;
     bool lna_ok;
     uint16_t lna_gain;
+    uint16_t agc1_gain;
+    uint16_t agc2_gain;
     uint8_t power_i;
     uint8_t power_q;
     uint32_t frequency_requested;
@@ -129,6 +138,12 @@ typedef struct {
     bool short_frame;
     bool pilots;
 
+    bool ts_use_ip;
+    char ts_fifo_path[128];
+    char ts_ip_addr[16];
+    int ts_ip_port;
+    uint32_t ts_packet_count_nolock;
+
     uint64_t last_updated_monotonic;
     pthread_mutex_t mutex;
     pthread_cond_t signal;
@@ -148,5 +163,7 @@ void config_set_frequency(uint32_t frequency);
 void config_set_symbolrate(uint32_t symbolrate);
 void config_set_frequency_and_symbolrate(uint32_t frequency, uint32_t symbolrate);
 void config_set_lnbv(bool enabled, bool horizontal);
+void config_set_udpts(char *udp_host, int udp_port);
+void config_set_rfport(int rfport_index);
 
 #endif

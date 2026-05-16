@@ -5,6 +5,8 @@
 This repository is LongMynd, a MiniTiouner DVB-S/S2 receiver program.
 The local fork adds support for EARDA/Eardatek `EDS-4B47FF1B+` tuner
 modules using an STV0903 demodulator and STB6100 tuner.
+It also carries the browser interface ported from the
+`philcrump/longmynd` fork.
 
 ## Build
 
@@ -14,8 +16,9 @@ Use the project `Makefile`:
 make
 ```
 
-Use `make clean && make` after changing headers that are not tracked by
-the simple dependency rules.
+The web interface depends on the `web/libwebsockets` submodule, `json-c`,
+and `libcap`; the default `make` target initializes and builds
+libwebsockets when needed.
 
 ## EARDA/Eardatek NIM
 
@@ -24,6 +27,8 @@ The EARDA path is selected with:
 ```sh
 ./longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 1131500 1500
 ```
+
+Add `-W 8080` to serve the web interface at `http://localhost:8080/`.
 
 `-N eardatek` is kept as an alias. The known working module is labelled
 `EDS-4B47FF1B+` and has an STB6100 tuner. The STV0903 demodulator uses a

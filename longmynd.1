@@ -4,9 +4,10 @@ longmynd \- Outputs transport streams from the Minitiouner DVB-S/S2 demodulator
 .SH SYNOPSIS
 .B longmynd \fR[\fB\-u\fR \fIUSB_BUS USB_DEVICE\fR]
          [\fB\-i\fR \fIMAIN_IP_ADDR\fR  \fIMAIN_PORT\fR | \fB\-t\fR \fIMAIN_TS_FIFO\fR]
-         [\fB\-I\fR \fISTATUS_IP_ADDR\fR  \fISTATUS_PORT\fR | \fB\-s\fR \fIMAIN_STATUS_FIFO\fR]
-         [\fB\-N\fR \fIserit\fR | \fB\-N\fR \fIearda\fR | \fB\-N\fR \fIeardatek\fR]
-         [\fB\-w\fR] [\fB\-b\fR] [\fB\-p\fR \fIh\fR | \fB\-p\fR \fIv\fR]
+	         [\fB\-I\fR \fISTATUS_IP_ADDR\fR  \fISTATUS_PORT\fR | \fB\-s\fR \fIMAIN_STATUS_FIFO\fR]
+	         [\fB\-N\fR \fIserit\fR | \fB\-N\fR \fIearda\fR | \fB\-N\fR \fIeardatek\fR]
+	         [\fB\-W\fR \fIWEB_PORT\fR]
+	         [\fB\-w\fR] [\fB\-b\fR] [\fB\-p\fR \fIh\fR | \fB\-p\fR \fIv\fR]
       \fIMAIN_FREQ\fR \fIMAIN_SR\fR
 .IR 
 .SH DESCRIPTION
@@ -54,6 +55,9 @@ Selects the NIM tuner module type.
 "-N serit" uses the default Serit STV0910/STV6120 path.
 "-N earda" or "-N eardatek" uses the EARDA/Eardatek EDS-4B47FF1B+ STV0903/STB6100 path.
 .TP
+.BR \-W " " \fIWEB_PORT\fR
+Enables the built-in web interface on the selected TCP port.
+.TP
 .BR \fIMAIN_FREQ\fR
 specifies the starting frequency (in KHz) of the Main TS Stream search algorithm".
 .TP
@@ -76,3 +80,6 @@ As above but any TS output will be to IP address 192.168.1.1 on port 87
 .TP
 longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 1131500 1500
 Uses an EARDA/Eardatek EDS-4B47FF1B+ STV0903/STB6100 NIM and sends the TS to local UDP port 10000.
+.TP
+longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 -W 8080 1131500 1500
+As above, and serves the web interface at http://localhost:8080/.

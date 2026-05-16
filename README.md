@@ -6,7 +6,7 @@ Copyright 2019 Heather Lomond
 
 ## Dependencies
 
-    sudo apt-get install libusb-1.0-0-dev libasound2-dev
+    sudo apt-get install libusb-1.0-0-dev libasound2-dev libjson-c-dev libcap-dev cmake
 
 To run longmynd without requiring root, unplug the minitiouner and then install the udev rules file with:
 
@@ -25,9 +25,62 @@ module use the STV0903 demodulator and STB6100 tuner path:
 
 `-N eardatek` is also accepted as an alias.
 
-To view the UDP transport stream locally:
+## Running for QO-100 with LO 9360000 kHz
+
+The frequency argument passed to longmynd is the tuner IF frequency in kHz,
+not the satellite downlink frequency. Calculate it as:
+
+    tuner_frequency_khz = satellite_frequency_khz - LO_frequency_khz
+
+With your `9360000 kHz` LO, the QO-100 beacon at `10491500 kHz` becomes:
+
+    10491500 - 9360000 = 1131500 kHz
+
+Run the EARDA/Eardatek MiniTiouner with UDP TS output, UDP status output, and
+the web interface on port `8080`:
+
+    ./longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 -W 8080 1131500 1500
+
+Open the web interface:
+
+    http://localhost:8080/
+
+    - or -
+
+    http://localhost:8080/click.html
+
+to use the clickable wideband spectrum.
+
+To view the UDP transport stream locally in VLC:
 
     vlc udp://@:10000
+
+    - or -
+
+    vlc --network-caching=5000 udp://@:10000
+
+for 5000 ms network caching.
+
+## Web Interface
+
+This fork includes the browser interface ported from
+[philcrump/longmynd](https://github.com/philcrump/longmynd/), another
+LongMynd fork that added a web interface.
+
+Builds use the `web/libwebsockets` git submodule. The normal `make` target
+initializes and builds that submodule when needed.
+
+Start longmynd with `-W <port>` and open the page in a browser:
+
+    ./longmynd -N earda -i 127.0.0.1 10000 -I 127.0.0.1 10001 -W 8080 1131500 1500
+
+Then browse to:
+
+    http://localhost:8080/
+
+    - or -
+
+    http://localhost:8080/click.html
 
 ## Run
 
@@ -106,6 +159,8 @@ A video player (e.g. VLC) must be running to consume the output of the TS FIFO.
     23  BCH Uncorrected     1 if some BCH-detected errors were not able to be corrected, 0 otherwise (DVB-S2 only)
     24  LNB Voltage Enabled 1 if LNB Voltage Supply is enabled, 0 otherwise (LNB Voltage Supply requires add-on board)
     25  LNB H Polarisation  1 if LNB Voltage Supply is configured for Horizontal Polarisation (18V), 0 otherwise (LNB Voltage Supply requires add-on board)
+    26  AGC1 Gain           Demodulator AGC1 gain value
+    27  AGC2 Gain           Demodulator AGC2 gain value
 
 
 ### MODCOD Lookup
