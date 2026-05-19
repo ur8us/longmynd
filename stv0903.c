@@ -41,6 +41,7 @@
 #define STV0903_FRESFEC         0x10
 #define STV0903_ALGOSWRST       0x01
 #define STV0903_DVBS2_COLD_SEARCH 0x81
+#define STV0903_SEARCH_RANGE_HZ 16000000U
 
 static uint32_t stv0903_mclk_hz = STV0903_MCLK;
 static uint32_t stv0903_sr_khz = 0;
@@ -218,48 +219,70 @@ static uint16_t stv0903_srate_reg(uint32_t sr_khz, uint32_t percent) {
     return (uint16_t)((srate_hz * 65536U) / stv0903_mclk_hz);
 }
 
+static uint8_t stv0903_setup_vth_defaults(void) {
+    uint8_t err=ERROR_NONE;
+    static const uint8_t vth_defaults[] = { 0xd7, 0x85, 0x58, 0x3a, 0x34, 0x28 };
+
+    for (uint8_t i=0; err==ERROR_NONE && i<sizeof(vth_defaults); i++) {
+        err = stv0910_write_reg((uint16_t)(RSTV0910_P1_VTH12 + i), vth_defaults[i]);
+    }
+
+    return err;
+}
+
+static uint16_t stv0903_cfr_range_reg(uint32_t sr_khz) {
+    uint32_t freq = STV0903_SEARCH_RANGE_HZ / 2000U;
+
+    freq += (sr_khz <= 5000U) ? 80U : 1600U;
+
+    return (uint16_t)((freq << 16) / (stv0903_mclk_hz / 1000U));
+}
+
+static uint8_t stv0903_setup_cfr_range(uint32_t sr_khz) {
+    uint8_t err=ERROR_NONE;
+    uint16_t cfr = stv0903_cfr_range_reg(sr_khz);
+    uint16_t neg_cfr = (uint16_t)(-((int16_t)cfr));
+
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CFRUP1, (uint8_t)((cfr >> 8) & 0xff));
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CFRUP0, (uint8_t)(cfr & 0xff));
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CFRLOW1, (uint8_t)((neg_cfr >> 8) & 0xff));
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CFRLOW0, (uint8_t)(neg_cfr & 0xff));
+
+    return err;
+}
+
 static uint8_t stv0903_setup_low_sr_scan(uint32_t sr_khz) {
     uint8_t err=ERROR_NONE;
     uint16_t sym;
 
     if (sr_khz <= 5000) {
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARCFG, 0x44);
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CFRUP1, 0x0f);
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CFRUP0, 0xff);
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CFRLOW1, 0xf0);
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CFRLOW0, 0x00);
+        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARCFG, 0x46);
+        if (err==ERROR_NONE) err = stv0903_setup_cfr_range(sr_khz);
         if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_RTCS2, 0x68);
     } else {
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARCFG, 0xc4);
+        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARCFG, 0x46);
+        if (err==ERROR_NONE) err = stv0903_setup_cfr_range(sr_khz);
         if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_RTCS2, 0x44);
     }
 
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_DMDT0M, 0x20);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_TMGCFG, 0xd2);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_TMGCFG, 0xd3);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CORRELMANT, sr_khz < 2000 ? 0x63 : 0x70);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_AGC2REF, 0x38);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_KREFTMG, 0x5a);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_TMGCFG2, 0xc1);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_KREFTMG, 0x80);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_TMGCFG2, 0x80);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CFRINIT1, 0x00);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CFRINIT0, 0x00);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_EQUALCFG, 0x41);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_FFECFG, 0x41);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_SFRSTEP, 0x00);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_TMGTHRISE, 0xe0);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_TMGTHFALL, 0xc0);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_SFRSTEP, 0x88);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_TMGTHRISE, 0x1e);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_TMGTHFALL, 0x08);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_DMDCFG2, 0x3b);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_RTC, 0x88);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_RTC, 0x68);
 
-    if (sr_khz < 2000) {
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARFREQ, 0x39);
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARHDR, 0x40);
-    } else if (sr_khz < 10000) {
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARFREQ, 0x4c);
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARHDR, 0x20);
-    } else {
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARFREQ, 0x4b);
-        if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARHDR, 0x20);
-    }
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARFREQ, 0x79);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CARHDR, 0x1c);
 
     sym = stv0903_srate_reg(sr_khz, 105);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_SFRUP1, (uint8_t)((sym >> 8) & 0x7f));
@@ -364,15 +387,15 @@ static uint8_t stv0903_setup_s2_search(void) {
 
     if (err==ERROR_NONE) err = stv0903_update_reg(RSTV0910_STOPCLK2,
         STV0903_STOP_CLKVIT1, STV0903_STOP_CLKVIT1);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_ACLC, 0x1a);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_BCLC, 0x09);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_ACLC, 0x2b);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_BCLC, 0x1a);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CAR2CFG, 0x26);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_VTH12, 0xd0);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_VTH23, 0x7d);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_VTH34, 0x53);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_VTH56, 0x2f);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_VTH67, 0x24);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_VTH78, 0x1f);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CAR3CFG, 0x02);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_ACLC2S2Q, 0x0b);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_ACLC2S28, 0x0a);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_BCLC2S2Q, 0x84);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_BCLC2S28, 0x84);
+    if (err==ERROR_NONE) err = stv0903_setup_vth_defaults();
 
     if (err!=ERROR_NONE) printf("ERROR: STV0903 setup DVB-S2 search\n");
 

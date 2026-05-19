@@ -56,6 +56,7 @@
 
 /* Milliseconds between each i2c control loop */
 #define I2C_LOOP_MS  100
+#define EARDATEK_UNLOCK_GRACE_READS 3
 
 /* -------------------------------------------------------------------------------------------------- */
 /* ----------------- GLOBALS ------------------------------------------------------------------------ */
@@ -475,6 +476,7 @@ void *loop_i2c(void *arg) {
     longmynd_status_t status_cpy;
     memset(&status_cpy, 0, sizeof(status_cpy));
     bool eardatek_ts_ready = false;
+    uint8_t eardatek_unlock_reads = 0;
 
     uint64_t last_i2c_loop = timestamp_ms();
     while (*err==ERROR_NONE && *thread_vars->main_err_ptr==ERROR_NONE) {
@@ -507,6 +509,7 @@ void *loop_i2c(void *arg) {
         strncpy(status_cpy.vlc_password, config_cpy.vlc_password, sizeof(status_cpy.vlc_password)-1);
         status_cpy.vlc_password[sizeof(status_cpy.vlc_password)-1] = '\0';
         eardatek_ts_ready = false;
+        eardatek_unlock_reads = 0;
             /* init all the modules */
 
             if (config_cpy.nim_model == NIM_MODEL_EARDATEK) {
@@ -608,13 +611,25 @@ void *loop_i2c(void *arg) {
                 if (*err==ERROR_NONE) *err=do_report(&status_cpy);
                 /* process state changes */
                 *err=stv0910_read_scan_state(status_cpy.demod, &status_cpy.demod_state);
-                if (status_cpy.demod_state==DEMOD_HUNTING) {
+                if (status_cpy.demod_state==DEMOD_S2) {
+                    eardatek_unlock_reads = 0;
+                }
+                else if (status_cpy.nim_model == NIM_MODEL_EARDATEK
+                    && eardatek_ts_ready
+                    && eardatek_unlock_reads < EARDATEK_UNLOCK_GRACE_READS) {
+                    eardatek_unlock_reads++;
+                    status_cpy.demod_state = DEMOD_S2;
+                }
+                else if (status_cpy.demod_state==DEMOD_HUNTING) {
+                    eardatek_unlock_reads = 0;
                     status_cpy.state=STATE_DEMOD_HUNTING;
                 }
                 else if (status_cpy.demod_state==DEMOD_FOUND_HEADER)  {
+                    eardatek_unlock_reads = 0;
                     status_cpy.state=STATE_DEMOD_FOUND_HEADER;
                 }
                 else if (status_cpy.demod_state==DEMOD_S) {
+                    eardatek_unlock_reads = 0;
                     status_cpy.state=STATE_DEMOD_S;
                 }
                 else if ((status_cpy.demod_state!=DEMOD_S2) && (*err==ERROR_NONE)) {
@@ -653,12 +668,16 @@ void *loop_i2c(void *arg) {
                 *err=stv0903_start_s2_scan();
                 status_cpy.state=STATE_DEMOD_HUNTING;
                 eardatek_ts_ready = false;
+                eardatek_unlock_reads = 0;
             }
             else if (status_cpy.state==STATE_DEMOD_S2) {
                 if (!eardatek_ts_ready) {
                     *err=stv0903_s2_lock_setup();
                     eardatek_ts_ready = true;
                 }
+            }
+            else {
+                eardatek_ts_ready = false;
             }
         }
 
