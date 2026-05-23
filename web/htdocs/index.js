@@ -163,7 +163,7 @@ $(document).ready(function()
             $("#gain-value").text("Auto");
           }
         }
-        $("#span-status-symbolrate").text(rx_status.symbolrate+"KS");
+        $("#span-status-symbolrate").text((rx_status.symbolrate / 1000.0)+"KS");
         if(rx_status.demod_state == 3) // DVB-S
         {
           $("#span-status-modcod").text(modcod_lookup_dvbs[rx_status.modcod]);
@@ -182,23 +182,36 @@ $(document).ready(function()
 
         $("#progressbar-ber").css('width', (rx_status.ber)+'%').attr('aria-valuenow', rx_status.ber).text(rx_status.ber/10.0+"%");
 
-        constellation_draw(rx_status.constellation);
+        if(rx_status.constellation) constellation_draw(rx_status.constellation);
 
-        ts_status = status_obj.packet.ts;
+        if(status_obj.packet.ts)
+        {
+          ts_status = status_obj.packet.ts;
 
-        $("#progressbar-ts-null").css('width', (ts_status.null_ratio)+'%').attr('aria-valuenow', ts_status.null_ratio).text(ts_status.null_ratio+"%");
+          $("#progressbar-ts-null").css('width', (ts_status.null_ratio)+'%').attr('aria-valuenow', ts_status.null_ratio).text(ts_status.null_ratio+"%");
 
-        $("#span-status-name").text(ts_status.service_name);
-        $("#span-status-provider").text(ts_status.service_provider_name);
+          $("#span-status-name").text(ts_status.service_name);
+          $("#span-status-provider").text(ts_status.service_provider_name);
 
-        let ulTsPids = $('<ul />');
-        for (pid in ts_status.PIDs) {
-          $('<li />')
-            .text(ts_status.PIDs[pid][0]+": "+mpeg_type_lookup[ts_status.PIDs[pid][1]])
-            .appendTo(ulTsPids);
+          try {
+            console.log("mpeg_type_lookup:", mpeg_type_lookup);
+            if(ts_status.PIDs)
+            {
+              let ulTsPids = $('<ul />');
+              for (let pid in ts_status.PIDs) {
+                let type_label = mpeg_type_lookup[ts_status.PIDs[pid][1]];
+                if(type_label === undefined) type_label = "Unknown";
+                $('<li />')
+                  .text(ts_status.PIDs[pid][0]+": "+type_label)
+                  .appendTo(ulTsPids);
+              }
+              $("#div-ts-pids").empty();
+              $("#div-ts-pids").append(ulTsPids);
+            }
+          } catch(e) {
+            console.log("Error rendering PIDs", e);
+          }
         }
-        $("#div-ts-pids").empty();
-        $("#div-ts-pids").append(ulTsPids);
 
       }
     }
