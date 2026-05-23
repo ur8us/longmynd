@@ -40,6 +40,7 @@
 uint8_t stv6120_init(uint32_t, uint32_t, bool);
 uint8_t stv6120_set_freq(uint8_t, uint32_t);
 uint8_t stv6120_cal_lowpass(uint8_t);
+uint8_t stv6120_set_bbgain(uint8_t gain);
 void stv6120_print_settings();
 
 #endif

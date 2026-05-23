@@ -423,6 +423,22 @@ uint8_t stv6120_init(uint32_t freq_tuner_1, uint32_t freq_tuner_2, bool swap) {
 
 
 /* -------------------------------------------------------------------------------------------------- */
+uint8_t stv6120_set_bbgain(uint8_t gain) {
+    uint8_t err=ERROR_NONE;
+    uint8_t val;
+
+    printf("Flow: STV6120 set BBGAIN=%u (%u dB)\n", gain, gain * 2);
+    if (gain > 8) gain = 8;
+    err = stv6120_read_reg(STV6120_CTRL2, &val);
+    if (err==ERROR_NONE) {
+        val = (val & ~0x0f) | (gain & 0x0f);
+        err = stv6120_write_reg(STV6120_CTRL2, val);
+    }
+    if (err!=ERROR_NONE) printf("ERROR: STV6120 set BBGAIN\n");
+
+    return err;
+}
+
 void stv6120_print_settings() {
 /* -------------------------------------------------------------------------------------------------- */
 /* debug routine to print out all the regsiter values in the tuner                                    */

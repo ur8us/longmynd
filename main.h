@@ -78,6 +78,7 @@ typedef struct {
     uint8_t demod;
     uint32_t freq_requested;
     uint32_t sr_requested;
+    uint8_t tuner_gain;
     bool beep_enabled;
 
     uint8_t device_usb_bus;
@@ -118,6 +119,7 @@ typedef struct {
     uint16_t lna_gain;
     uint16_t agc1_gain;
     uint16_t agc2_gain;
+    uint8_t tuner_gain;
     uint8_t power_i;
     uint8_t power_q;
     uint32_t frequency_requested;
@@ -172,5 +174,6 @@ void config_set_frequency_and_symbolrate(uint32_t frequency, uint32_t symbolrate
 void config_set_lnbv(bool enabled, bool horizontal);
 void config_set_udpts(char *udp_host, int udp_port);
 void config_set_rfport(int rfport_index);
+void config_set_gain(uint8_t gain);
 
 #endif

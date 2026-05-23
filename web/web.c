@@ -343,6 +343,14 @@ int callback_ws(struct lws *wsi, enum lws_callback_reasons reason, void *user, v
                                 config_set_udpts(udp_host, udp_port);
                             }
                         }
+                        else if(message_string[0] == 'G')
+                        {
+                            /* Tuner Gain Command */
+                            uint8_t gain;
+
+                            gain = (uint8_t)strtol(&message_string[1],NULL,10);
+                            config_set_gain(gain);
+                        }
                         else if(message_string[0] == 'T')
                         {
                             /* Tuner / RF Port Index Command */
@@ -435,6 +443,8 @@ static void web_status_json(char **status_string_ptr, longmynd_status_t *status,
     json_object_object_add(statusPacketRxObj, "agc1", json_object_new_double((double)status_cache->agc1_gain));
 
     json_object_object_add(statusPacketRxObj, "agc2", json_object_new_double((double)status_cache->agc2_gain));
+
+    json_object_object_add(statusPacketRxObj, "tuner_gain", json_object_new_double((double)status_cache->tuner_gain));
 
     json_object_object_add(statusPacketRxObj, "frequency", json_object_new_double((double)(status_cache->frequency_requested+(status_cache->frequency_offset/1000))));
     json_object_object_add(statusPacketRxObj, "frequency_requested", json_object_new_double((double)status_cache->frequency_requested));

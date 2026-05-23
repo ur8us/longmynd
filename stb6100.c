@@ -218,3 +218,15 @@ uint8_t stb6100_init(uint32_t freq, uint32_t sr) {
 
     return err;
 }
+
+uint8_t stb6100_set_gain(uint8_t gain) {
+    uint8_t err=ERROR_NONE;
+    uint8_t g = gain & STB6100_G_G;
+
+    printf("Flow: STB6100 set gain=%u\n", g);
+    err = stb6100_write_reg(STB6100_G,
+        (uint8_t)(((0x10 & ~STB6100_G_G) | g) & ~STB6100_G_GCT) | 0x20);
+    if (err!=ERROR_NONE) printf("ERROR: STB6100 set gain\n");
+
+    return err;
+}

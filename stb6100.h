@@ -20,5 +20,6 @@ uint8_t stb6100_init(uint32_t freq, uint32_t sr);
 uint8_t stb6100_set_freq(uint32_t freq, uint32_t sr);
 uint8_t stb6100_set_bandwidth(uint32_t bandwidth);
 uint8_t stb6100_read_lock(uint8_t *locked);
+uint8_t stb6100_set_gain(uint8_t gain);
 
 #endif

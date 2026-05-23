@@ -180,6 +180,16 @@ void config_set_rfport(int rfport_index)
     pthread_mutex_unlock(&longmynd_config.mutex);
 }
 
+void config_set_gain(uint8_t gain)
+{
+    pthread_mutex_lock(&longmynd_config.mutex);
+
+    longmynd_config.tuner_gain = gain;
+    longmynd_config.new = true;
+
+    pthread_mutex_unlock(&longmynd_config.mutex);
+}
+
 /* -------------------------------------------------------------------------------------------------- */
 uint64_t monotonic_ms(void) {
 /* -------------------------------------------------------------------------------------------------- */
@@ -228,6 +238,7 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
     config->web_port = 0;
     config->vlc_port = 8082;
     config->vlc_password[0] = '\0';
+    config->tuner_gain = 0;
     char polarisation_str[8];
     char nim_str[16];
 
@@ -286,6 +297,9 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
             case 'b':
                 config->beep_enabled=true;
                 param--; /* there is no data for this so go back */
+                break;
+            case 'g':
+                config->tuner_gain=(uint8_t)strtol(argv[param],NULL,10);
                 break;
             case 'W':
                 config->web_port=(uint16_t)strtol(argv[param],NULL,10);
@@ -370,6 +384,8 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
               if (config->web_enabled)  printf("              Web interface enabled on port %i\n", config->web_port);
               if (config->vlc_password[0] != '\0') printf("              VLC password set, HTTP port=%i\n", config->vlc_port);
               printf("              NIM model=%s\n", config->nim_model == NIM_MODEL_EARDATEK ? "EARDA/Eardatek EDS-4B47FF1B+ STV0903/STB6100" : "Serit STV0910/STV6120");
+              if (config->tuner_gain > 0) printf("              Tuner gain=%u\n", config->tuner_gain);
+              else                         printf("              Tuner gain=auto (SR-based)\n");
              if (config->port_swap)   printf("              NIM inputs are swapped (Main now refers to BOTTOM F-Type\n");
              else                     printf("              Main refers to TOP F-Type\n");
              if (config->beep_enabled) printf("              MER Beep enabled\n");
@@ -505,6 +521,7 @@ void *loop_i2c(void *arg) {
         status_cpy.nim_model = config_cpy.nim_model;
         status_cpy.rfport_index = config_cpy.port_swap ? 1 : 0;
         status_cpy.lna_ok = false;
+        status_cpy.tuner_gain = config_cpy.tuner_gain;
         status_cpy.vlc_port = config_cpy.vlc_port;
         strncpy(status_cpy.vlc_password, config_cpy.vlc_password, sizeof(status_cpy.vlc_password)-1);
         status_cpy.vlc_password[sizeof(status_cpy.vlc_password)-1] = '\0';
@@ -534,6 +551,7 @@ void *loop_i2c(void *arg) {
                 }
                 if (*err==ERROR_NONE) printf("      Status: Eardatek tuner I2C address=0x%.2x\n", nim_get_tuner_addr());
                 if (*err==ERROR_NONE) *err=stb6100_init(config_cpy.freq_requested, config_cpy.sr_requested);
+                if (*err==ERROR_NONE && config_cpy.tuner_gain > 0) *err=stb6100_set_gain(config_cpy.tuner_gain);
             } else {
                 nim_set_demod_addr(NIM_DEMOD_ADDR_SERIT);
                 nim_set_tuner_addr(NIM_TUNER_ADDR);
@@ -545,6 +563,7 @@ void *loop_i2c(void *arg) {
                 /* we turn on the LNA we want and turn the other off (if they exist) */
                 if (*err==ERROR_NONE) *err=stvvglna_init(NIM_INPUT_TOP,    (config_cpy.port_swap) ? STVVGLNA_OFF : STVVGLNA_ON,  &status_cpy.lna_ok);
                 if (*err==ERROR_NONE) *err=stvvglna_init(NIM_INPUT_BOTTOM, (config_cpy.port_swap) ? STVVGLNA_ON  : STVVGLNA_OFF, &status_cpy.lna_ok);
+                if (*err==ERROR_NONE && config_cpy.tuner_gain > 0) *err=stv6120_set_bbgain(config_cpy.tuner_gain);
             }
 
             if (*err!=ERROR_NONE) printf("ERROR: failed to init a device - is the NIM powered on?\n");

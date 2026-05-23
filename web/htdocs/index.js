@@ -99,6 +99,22 @@ $(document).ready(function()
       $("#input-frequency-lo").addClass("is-invalid");
     }
   });
+
+  /* Tuner Gain Slider */
+  $("#input-gain").on("input", function()
+  {
+    let gain = parseInt($(this).val());
+    if(gain > 0)
+    {
+      $("#gain-value").text(gain + "/15");
+      ws_control.sendMessage("G"+gain);
+    }
+    else
+    {
+      $("#gain-value").text("Auto");
+      ws_control.sendMessage("G0");
+    }
+  });
   /*
   {"type":"status","timestamp":1571256202.388,"packet":{"rx":{"demod_state":4,"frequency":742530,"symbolrate":1998138,
   "vber":0,"ber":1250,"mer":80,"modcod":6,"short_frame":false,"pilot_symbols":true,
@@ -136,6 +152,17 @@ $(document).ready(function()
 
         $("#badge-state").text(demod_state_lookup[rx_status.demod_state]);
         $("#span-status-frequency").text(rx_status.frequency+"KHz");
+
+        if(rx_status.tuner_gain !== undefined)
+        {
+          let gain = rx_status.tuner_gain;
+          $("#input-gain").val(gain);
+          if(gain > 0) {
+            $("#gain-value").text(gain + "/15");
+          } else {
+            $("#gain-value").text("Auto");
+          }
+        }
         $("#span-status-symbolrate").text(rx_status.symbolrate+"KS");
         if(rx_status.demod_state == 3) // DVB-S
         {
