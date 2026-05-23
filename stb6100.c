@@ -117,8 +117,8 @@ uint8_t stb6100_set_freq(uint32_t freq, uint32_t sr) {
 
     printf("Flow: STB6100 set freq\n");
 
-    if (freq < 950000 || freq > 2150000) {
-        printf("ERROR: STB6100 frequency must be 950000-2150000 KHz for Eardatek\n");
+    if (freq < 940000 || freq > 2150000) {
+        printf("ERROR: STB6100 frequency must be 940000-2150000 KHz for Eardatek\n");
         return ERROR_ARGS_INPUT;
     }
 

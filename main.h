@@ -141,6 +141,7 @@ typedef struct {
     uint8_t ts_null_percentage;
     uint32_t ts_total_bitrate;
     uint32_t ts_useful_bitrate;
+    uint32_t ts_overhead_percentage;
     uint32_t ts_elementary_streams[NUM_ELEMENT_STREAMS][3]; // { pid, type, percentage*10 }
     uint32_t modcod;
     bool short_frame;

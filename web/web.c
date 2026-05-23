@@ -528,6 +528,13 @@ static void web_status_json(char **status_string_ptr, longmynd_status_t *status,
             json_object_array_add(elementaryPIDsArray, elementaryPID);
         }
     }
+    /* Add Overhead as a pseudo-PID */
+    elementaryPID = json_object_new_array();
+    json_object_array_add(elementaryPID, json_object_new_double(-1)); // PID -1
+    json_object_array_add(elementaryPID, json_object_new_double(0));  // Type 0
+    json_object_array_add(elementaryPID, json_object_new_double((double)status_cache->ts_overhead_percentage));
+    json_object_array_add(elementaryPIDsArray, elementaryPID);
+
     json_object_object_add(statusPacketTsObj, "PIDs", elementaryPIDsArray);
 
     json_object_object_add(statusPacketObj, "ts", statusPacketTsObj);

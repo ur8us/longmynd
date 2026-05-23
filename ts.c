@@ -749,12 +749,24 @@ void *loop_ts_parse(void *arg) {
 
             /* Calculate occupancy for each identified stream */
             if (pid_counts != NULL) {
+                uint32_t identified_occupancy = 0;
                 for (int i = 0; i < NUM_ELEMENT_STREAMS; i++) {
                     if (status->ts_elementary_streams[i][0] > 0) {
                         uint32_t pid = status->ts_elementary_streams[i][0];
                         status->ts_elementary_streams[i][2] = (pid_counts[pid] * 1000) / bitrate_packet_total;
+                        identified_occupancy += status->ts_elementary_streams[i][2];
                     }
                 }
+                
+                /* Calculate Overhead: Total - Null - Identified */
+                uint32_t total_pct_10 = 1000;
+                uint32_t null_pct_10 = status->ts_null_percentage * 10;
+                if (total_pct_10 > (null_pct_10 + identified_occupancy)) {
+                    status->ts_overhead_percentage = total_pct_10 - null_pct_10 - identified_occupancy;
+                } else {
+                    status->ts_overhead_percentage = 0;
+                }
+
                 memset(pid_counts, 0, MAX_PID * sizeof(uint32_t));
             }
             

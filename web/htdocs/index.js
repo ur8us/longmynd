@@ -198,20 +198,27 @@ $(document).ready(function () {
             $("#div-ts-pids").empty();
             if (ts_status.PIDs) {
               for (let pid in ts_status.PIDs) {
-                let type_label = mpeg_type_lookup[ts_status.PIDs[pid][1]];
-                if (type_label === undefined) type_label = "Unknown";
+                let pid_num = ts_status.PIDs[pid][0];
+                let type_label = "";
+                if (pid_num == -1) {
+                  type_label = "Overhead";
+                } else {
+                  type_label = mpeg_type_lookup[ts_status.PIDs[pid][1]];
+                  if (type_label === undefined) type_label = "Unknown";
+                }
+
                 let occupancy = ts_status.PIDs[pid][2]
                   ? (ts_status.PIDs[pid][2] / 10.0).toFixed(1) + "%"
                   : "0%";
+
+                let text =
+                  pid_num == -1
+                    ? occupancy + ": Overhead"
+                    : pid_num + " (" + occupancy + "): " + type_label;
+
                 $("<div />")
                   .css("margin-left", "10px")
-                  .text(
-                    ts_status.PIDs[pid][0] +
-                      " (" +
-                      occupancy +
-                      "): " +
-                      type_label,
-                  )
+                  .text(text)
                   .appendTo($("#div-ts-pids"));
               }
             }
