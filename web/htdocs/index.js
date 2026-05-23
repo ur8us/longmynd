@@ -1,6 +1,7 @@
-'use strict';
+"use strict";
 
-const ws_url = "ws://" + window.location.hostname + ":" + window.location.port + "/";
+const ws_url =
+  "ws://" + window.location.hostname + ":" + window.location.port + "/";
 const DEFAULT_LO_FREQUENCY_KHZ = 9360000;
 const QO100_BEACON_FREQUENCY_KHZ = 10491500;
 const QO100_BEACON_SYMBOLRATE_KS = 1500;
@@ -20,97 +21,78 @@ let ts_status = null;
 let lo_frequency = DEFAULT_LO_FREQUENCY_KHZ;
 let config_initialized = false;
 
-function load_settings()
-{
-  if(typeof(Storage) === "undefined")
-  {
+function load_settings() {
+  if (typeof Storage === "undefined") {
     return;
   }
 
   const storage_lo_frequency = localStorage.getItem("longmynd-lo-frequency");
-  if(storage_lo_frequency != null)
-  {
-    try
-    {
+  if (storage_lo_frequency != null) {
+    try {
       const stored_lo_frequency = JSON.parse(storage_lo_frequency);
-      if(!isNaN(stored_lo_frequency))
-      {
+      if (!isNaN(stored_lo_frequency)) {
         lo_frequency = stored_lo_frequency;
       }
-    }
-    catch(e)
-    {
+    } catch (e) {
       console.log("Error parsing storage_lo_frequency!", e);
     }
   }
 }
 
-function save_settings()
-{
-  if(typeof(Storage) !== "undefined")
-  {
+function save_settings() {
+  if (typeof Storage !== "undefined") {
     localStorage.setItem("longmynd-lo-frequency", JSON.stringify(lo_frequency));
   }
 }
 
-$(document).ready(function()
-{
+$(document).ready(function () {
   load_settings();
   $("#input-frequency-lo").val(lo_frequency);
 
   /* Set up configure */
-  $("#submit-freq-sr").click(function(e)
-  {
+  $("#submit-freq-sr").click(function (e) {
     e.preventDefault();
 
     let input_frequency_value = parseInt($("#input-frequency").val());
 
-    if(isNaN(input_frequency_value))
-    {
-      input_frequency_value = parseInt($("#input-qo100frequency").val()) - lo_frequency;
+    if (isNaN(input_frequency_value)) {
+      input_frequency_value =
+        parseInt($("#input-qo100frequency").val()) - lo_frequency;
     }
     let input_symbolrate_value = parseInt($("#input-symbolrate").val());
 
-    if(input_frequency_value != 0 && input_symbolrate_value != 0)
-    {
-      ws_control.sendMessage("C"+input_frequency_value+","+input_symbolrate_value);
+    if (input_frequency_value != 0 && input_symbolrate_value != 0) {
+      ws_control.sendMessage(
+        "C" + input_frequency_value + "," + input_symbolrate_value,
+      );
     }
   });
-  $("#beacon-freq-sr").click(function(e)
-  {
+  $("#beacon-freq-sr").click(function (e) {
     e.preventDefault();
     $("#input-qo100frequency").val(QO100_BEACON_FREQUENCY_KHZ);
     $("#input-frequency").val("");
     $("#input-symbolrate").val(QO100_BEACON_SYMBOLRATE_KS);
   });
 
-  $("#input-frequency-lo").keyup(function()
-  {
+  $("#input-frequency-lo").keyup(function () {
     const input_lo_frequency = parseInt($("#input-frequency-lo").val(), 10);
 
-    if(!isNaN(input_lo_frequency))
-    {
+    if (!isNaN(input_lo_frequency)) {
       $("#input-frequency-lo").removeClass("is-invalid");
       lo_frequency = input_lo_frequency;
       save_settings();
-    }
-    else
-    {
+    } else {
       $("#input-frequency-lo").addClass("is-invalid");
     }
   });
 
   /* Tuner Gain Slider */
-  $("#input-gain").on("input", function()
-  {
+  $("#input-gain").on("input", function () {
     let gain = parseInt($(this).val());
-    if(gain > 0)
-    {
+    if (gain > 0) {
       $("#gain-value").text(gain + "/15");
-      ws_control.sendMessage("G"+gain);
-    }
-    else
-    {
+      ws_control.sendMessage("G" + gain);
+    } else {
       $("#gain-value").text("Auto");
       ws_control.sendMessage("G0");
     }
@@ -122,114 +104,132 @@ $(document).ready(function()
   "ts":{"service_name":"A71A","service_provider_name":"QARS","null_ratio":0,"PIDs":[[257,27],[258,3]]}}}
 */
   /* Render to fields */
-  function render_status(data_json)
-  {
+  function render_status(data_json) {
     let status_obj;
     let status_packet;
     try {
       status_obj = JSON.parse(data_json);
-      if(status_obj != null)
-      {
+      if (status_obj != null) {
         //console.log(status_obj);
         rx_status = status_obj.packet.rx;
 
-        if(!config_initialized)
-        {
-          if($("#input-frequency").val() === "")
-          {
+        if (!config_initialized) {
+          if ($("#input-frequency").val() === "") {
             $("#input-frequency").val(rx_status.frequency_requested);
           }
-          if($("#input-symbolrate").val() === "")
-          {
+          if ($("#input-symbolrate").val() === "") {
             $("#input-symbolrate").val(rx_status.symbolrate_requested);
           }
           config_initialized = true;
         }
 
         let rflevel_dbm = rflevel_lookupfn(rx_status.agc1, rx_status.agc2);
-        $("#valuedisplay-rflevel").text(rflevel_dbm+"dBm");
-        $("#progressbar-rflevel").css('width', ((rflevel_dbm+40)*(100.0/35)+'%')).attr('aria-valuenow', rflevel_dbm);
+        $("#valuedisplay-rflevel").text(rflevel_dbm + "dBm");
+        $("#progressbar-rflevel")
+          .css("width", (rflevel_dbm + 40) * (100.0 / 35) + "%")
+          .attr("aria-valuenow", rflevel_dbm);
 
         $("#badge-state").text(demod_state_lookup[rx_status.demod_state]);
-        $("#span-status-frequency").text(rx_status.frequency+"KHz");
+        $("#span-status-frequency").text(rx_status.frequency + "KHz");
 
-        if(rx_status.tuner_gain !== undefined)
-        {
+        if (rx_status.tuner_gain !== undefined) {
           let gain = rx_status.tuner_gain;
           $("#input-gain").val(gain);
-          if(gain > 0) {
+          if (gain > 0) {
             $("#gain-value").text(gain + "/15");
           } else {
             $("#gain-value").text("Auto");
           }
         }
-        $("#span-status-symbolrate").text((rx_status.symbolrate / 1000.0)+"KS");
-        if(rx_status.demod_state == 3) // DVB-S
+        $("#span-status-symbolrate").text(rx_status.symbolrate / 1000.0 + "KS");
+        if (rx_status.demod_state == 3) // DVB-S
         {
           $("#span-status-modcod").text(modcod_lookup_dvbs[rx_status.modcod]);
-        }
-        else if(rx_status.demod_state == 4) // DVB-S2
+        } else if (rx_status.demod_state == 4) // DVB-S2
         {
           $("#span-status-modcod").text(modcod_lookup_dvbs2[rx_status.modcod]);
-        }
-        else
-        {
+        } else {
           $("#span-status-modcod").text("");
         }
-        $("#progressbar-mer").css('width', (rx_status.mer/3.1)+'%').attr('aria-valuenow', rx_status.mer).text(rx_status.mer/10.0+"dB");
+        $("#progressbar-mer")
+          .css("width", rx_status.mer / 3.1 + "%")
+          .attr("aria-valuenow", rx_status.mer)
+          .text(rx_status.mer / 10.0 + "dB");
 
-        $("#progressbar-vber").css('width', (rx_status.vber)+'%').attr('aria-valuenow', rx_status.vber).text(rx_status.vber/10.0+"%");
+        $("#progressbar-vber")
+          .css("width", rx_status.vber + "%")
+          .attr("aria-valuenow", rx_status.vber)
+          .text(rx_status.vber / 10.0 + "%");
 
-        $("#progressbar-ber").css('width', (rx_status.ber)+'%').attr('aria-valuenow', rx_status.ber).text(rx_status.ber/10.0+"%");
+        $("#progressbar-ber")
+          .css("width", rx_status.ber + "%")
+          .attr("aria-valuenow", rx_status.ber)
+          .text(rx_status.ber / 10.0 + "%");
 
-        if(rx_status.constellation) constellation_draw(rx_status.constellation);
+        if (rx_status.constellation)
+          constellation_draw(rx_status.constellation);
 
-        if(status_obj.packet.ts)
-        {
+        if (status_obj.packet.ts) {
           ts_status = status_obj.packet.ts;
 
-          $("#progressbar-ts-null").css('width', (ts_status.null_ratio)+'%').attr('aria-valuenow', ts_status.null_ratio).text(ts_status.null_ratio+"%");
+          let format_bitrate = function (bps) {
+            if (bps >= 1000000) return (bps / 1000000.0).toFixed(2) + " Mbps";
+            if (bps >= 1000) return (bps / 1000.0).toFixed(1) + " Kbps";
+            return bps + " bps";
+          };
+
+          $("#span-status-bitrate-total").text(
+            format_bitrate(ts_status.bitrate_total),
+          );
+          $("#span-status-bitrate-useful").text(
+            format_bitrate(ts_status.bitrate_useful),
+          );
+
+          $("#progressbar-density")
+            .css("width", 100.0 - ts_status.null_ratio + "%")
+            .attr("aria-valuenow", 100.0 - ts_status.null_ratio)
+            .text((100.0 - ts_status.null_ratio).toFixed(1) + "%");
 
           $("#span-status-name").text(ts_status.service_name);
           $("#span-status-provider").text(ts_status.service_provider_name);
 
           try {
             console.log("mpeg_type_lookup:", mpeg_type_lookup);
-            if(ts_status.PIDs)
-            {
-              let ulTsPids = $('<ul />');
+            $("#div-ts-pids").empty();
+            if (ts_status.PIDs) {
               for (let pid in ts_status.PIDs) {
                 let type_label = mpeg_type_lookup[ts_status.PIDs[pid][1]];
-                if(type_label === undefined) type_label = "Unknown";
-                $('<li />')
-                  .text(ts_status.PIDs[pid][0]+": "+type_label)
-                  .appendTo(ulTsPids);
+                if (type_label === undefined) type_label = "Unknown";
+                let occupancy = ts_status.PIDs[pid][2]
+                  ? (ts_status.PIDs[pid][2] / 10.0).toFixed(1) + "%"
+                  : "0%";
+                $("<div />")
+                  .css("margin-left", "10px")
+                  .text(
+                    ts_status.PIDs[pid][0] +
+                      " (" +
+                      occupancy +
+                      "): " +
+                      type_label,
+                  )
+                  .appendTo($("#div-ts-pids"));
               }
-              $("#div-ts-pids").empty();
-              $("#div-ts-pids").append(ulTsPids);
             }
-          } catch(e) {
+          } catch (e) {
             console.log("Error rendering PIDs", e);
           }
         }
-
       }
-    }
-    catch(e)
-    {
-      console.log("Error parsing message!",e);
+    } catch (e) {
+      console.log("Error parsing message!", e);
     }
   }
 
-
   /* Set up listener for websocket */
-  render_timer = setInterval(function()
-  {
-    if(!render_busy)
-    {
+  render_timer = setInterval(function () {
+    if (!render_busy) {
       render_busy = true;
-      if(ws_monitor_buffer.length > 0)
-      {
+      if (ws_monitor_buffer.length > 0) {
         /* Pull newest data off the buffer and render it */
         let data_frame = ws_monitor_buffer.pop();
 
@@ -238,10 +238,11 @@ $(document).ready(function()
         ws_monitor_buffer.length = 0;
       }
       render_busy = false;
-    }
-    else
-    {
-      console.log("Slow render blocking next frame, configured interval is ", render_interval);
+    } else {
+      console.log(
+        "Slow render blocking next frame, configured interval is ",
+        render_interval,
+      );
     }
   }, render_interval);
 });

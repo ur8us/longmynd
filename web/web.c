@@ -512,6 +512,9 @@ static void web_status_json(char **status_string_ptr, longmynd_status_t *status,
 
     json_object_object_add(statusPacketTsObj, "null_ratio", json_object_new_double((double)status_cache->ts_null_percentage));
 
+    json_object_object_add(statusPacketTsObj, "bitrate_total", json_object_new_double((double)status_cache->ts_total_bitrate));
+    json_object_object_add(statusPacketTsObj, "bitrate_useful", json_object_new_double((double)status_cache->ts_useful_bitrate));
+
     json_object *elementaryPIDsArray = json_object_new_array();
     json_object *elementaryPID;
     for (int j=0; j<NUM_ELEMENT_STREAMS; j++) {
@@ -520,7 +523,8 @@ static void web_status_json(char **status_string_ptr, longmynd_status_t *status,
             elementaryPID = json_object_new_array();
             json_object_array_add(elementaryPID, json_object_new_double(status_cache->ts_elementary_streams[j][0]));
             json_object_array_add(elementaryPID, json_object_new_double(status_cache->ts_elementary_streams[j][1]));
-            /* Add to array [[x,y],[x,y]] */
+            json_object_array_add(elementaryPID, json_object_new_double((double)status_cache->ts_elementary_streams[j][2]));
+            /* Add to array [[x,y,z],[x,y,z]] */
             json_object_array_add(elementaryPIDsArray, elementaryPID);
         }
     }

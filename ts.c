@@ -431,6 +431,12 @@ void *loop_ts_parse(void *arg) {
     uint32_t service_provider_name_length;
     uint32_t service_name_length;
 
+    uint64_t last_bitrate_calc_time = monotonic_ms();
+    uint32_t bitrate_packet_total = 0;
+    uint32_t bitrate_packet_null = 0;
+    uint32_t *pid_counts = malloc(MAX_PID * sizeof(uint32_t));
+    if (pid_counts != NULL) memset(pid_counts, 0, MAX_PID * sizeof(uint32_t));
+
     ts_buffer = malloc(TS_FILTER_BUFFER_SIZE);
     if(ts_buffer == NULL)
     {
@@ -498,6 +504,8 @@ void *loop_ts_parse(void *arg) {
             ts_pid = (uint32_t)((ts_packet_ptr[1] & 0x1F) << 8) | (uint32_t)ts_packet_ptr[2];
         
             ts_packet_total_count++;
+
+            if (pid_counts != NULL) pid_counts[ts_pid]++;
             
             ts_payload_content_offset = 4;
 
@@ -726,6 +734,37 @@ void *loop_ts_parse(void *arg) {
 
             ts_packet_ptr++;
         }
+
+        bitrate_packet_total += ts_packet_total_count;
+        bitrate_packet_null += ts_packet_null_count;
+
+        uint64_t now = monotonic_ms();
+        if (now >= (last_bitrate_calc_time + 1000))
+        {
+            uint32_t delta_ms = (uint32_t)(now - last_bitrate_calc_time);
+            
+            pthread_mutex_lock(&status->mutex);
+            status->ts_total_bitrate = (uint32_t)(((uint64_t)bitrate_packet_total * 188 * 8 * 1000) / delta_ms);
+            status->ts_useful_bitrate = (uint32_t)(((uint64_t)(bitrate_packet_total - bitrate_packet_null) * 188 * 8 * 1000) / delta_ms);
+
+            /* Calculate occupancy for each identified stream */
+            if (pid_counts != NULL) {
+                for (int i = 0; i < NUM_ELEMENT_STREAMS; i++) {
+                    if (status->ts_elementary_streams[i][0] > 0) {
+                        uint32_t pid = status->ts_elementary_streams[i][0];
+                        status->ts_elementary_streams[i][2] = (pid_counts[pid] * 1000) / bitrate_packet_total;
+                    }
+                }
+                memset(pid_counts, 0, MAX_PID * sizeof(uint32_t));
+            }
+            
+            pthread_mutex_unlock(&status->mutex);
+
+            bitrate_packet_total = 0;
+            bitrate_packet_null = 0;
+            last_bitrate_calc_time = now;
+        }
+
         pthread_mutex_lock(&status->mutex);
 
         if(ts_packet_total_count > 0)

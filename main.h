@@ -139,7 +139,9 @@ typedef struct {
     char service_name[255];
     char service_provider_name[255];
     uint8_t ts_null_percentage;
-    uint16_t ts_elementary_streams[NUM_ELEMENT_STREAMS][2]; // { pid, type }
+    uint32_t ts_total_bitrate;
+    uint32_t ts_useful_bitrate;
+    uint32_t ts_elementary_streams[NUM_ELEMENT_STREAMS][3]; // { pid, type, percentage*10 }
     uint32_t modcod;
     bool short_frame;
     bool pilots;
@@ -167,6 +169,7 @@ typedef struct {
 } thread_vars_t;
 
 uint64_t timestamp_ms(void);
+uint64_t monotonic_ms(void);
 
 void config_set_frequency(uint32_t frequency);
 void config_set_symbolrate(uint32_t symbolrate);

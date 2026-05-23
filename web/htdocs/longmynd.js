@@ -1,4 +1,12 @@
-const ws_longmynd_url = window.location.protocol == "https:" ? "wss:" : "ws:" + "//" + window.location.hostname + ":" + window.location.port + "/";
+const ws_longmynd_url =
+  window.location.protocol == "https:"
+    ? "wss:"
+    : "ws:" +
+      "//" +
+      window.location.hostname +
+      ":" +
+      window.location.port +
+      "/";
 
 var ws_monitor_buffer = [];
 var ws_control_buffer = [];
@@ -10,8 +18,8 @@ var render_busy = false;
 var render_interval = 100;
 
 var vlc_control_autoreset = true;
-var vlc_control_autoreset_endpoint = '127.0.0.1:8082';
-var vlc_control_password = '';
+var vlc_control_autoreset_endpoint = "127.0.0.1:8082";
+var vlc_control_password = "";
 
 var lo_frequency = 9360000;
 
@@ -24,7 +32,7 @@ var demod_state_lookup = {
   1: "Hunting",
   2: "Header..",
   3: "Lock DVB-S",
-  4: "Lock DVB-S2"
+  4: "Lock DVB-S2",
 };
 
 var modcod_lookup_dvbs = {
@@ -34,8 +42,8 @@ var modcod_lookup_dvbs = {
   7: "QPSK 3/4",
   9: "QPSK 5/6",
   10: "QPSK 6/7",
-  11: "QPSK 7/8"
-}
+  11: "QPSK 7/8",
+};
 
 var modcod_lookup_dvbs2 = {
   0: "DummyPL",
@@ -66,8 +74,8 @@ var modcod_lookup_dvbs2 = {
   25: "32APSK 4/5",
   26: "32APSK 5/6",
   27: "32APSK 8/9",
-  28: "32APSK 9/10"
-}
+  28: "32APSK 9/10",
+};
 
 var mpeg_type_lookup = {
   1: "MPEG1 Video",
@@ -77,42 +85,42 @@ var mpeg_type_lookup = {
   27: "H.264 Video",
   33: "JPEG2K Video",
   36: "H.265 Video",
-  129: "AC3 Audio"
-}
+  129: "AC3 Audio",
+};
 
-function format_frequency_mhz(_frequency_khz)
-{
+function format_frequency_mhz(_frequency_khz) {
   return (_frequency_khz / 1000.0).toFixed(3) + " MHz";
 }
 
-function build_vlc_control_url(_command)
-{
-  return "http://" + vlc_control_autoreset_endpoint + "/requests/status.xml?command=" + _command;
+function build_vlc_control_url(_command) {
+  return (
+    "http://" +
+    vlc_control_autoreset_endpoint +
+    "/requests/status.xml?command=" +
+    _command
+  );
 }
 
-function vlc_ajax_headers()
-{
+function vlc_ajax_headers() {
   var headers = {};
-  if(vlc_control_password.length > 0)
-  {
+  if (vlc_control_password.length > 0) {
     headers["Authorization"] = "Basic " + btoa(":" + vlc_control_password);
   }
   return headers;
 }
 
-function current_vlc_udp_input()
-{
+function current_vlc_udp_input() {
   var ts_port = 10000;
 
-  if(typeof rx_status !== "undefined" && rx_status != null && rx_status.ts_ip_port > 0)
-  {
+  if (
+    typeof rx_status !== "undefined" &&
+    rx_status != null &&
+    rx_status.ts_ip_port > 0
+  ) {
     ts_port = rx_status.ts_ip_port;
-  }
-  else if($("#input-udpts-port").length > 0)
-  {
+  } else if ($("#input-udpts-port").length > 0) {
     var input_port = parseInt($("#input-udpts-port").val(), 10);
-    if(!isNaN(input_port) && input_port > 0 && input_port <= 65535)
-    {
+    if (!isNaN(input_port) && input_port > 0 && input_port <= 65535) {
       ts_port = input_port;
     }
   }
@@ -120,10 +128,11 @@ function current_vlc_udp_input()
   return "udp://@:" + ts_port;
 }
 
-function reset_vlc_stream()
-{
-  if(!vlc_control_autoreset || !is_valid_vlc_endpoint(vlc_control_autoreset_endpoint))
-  {
+function reset_vlc_stream() {
+  if (
+    !vlc_control_autoreset ||
+    !is_valid_vlc_endpoint(vlc_control_autoreset_endpoint)
+  ) {
     return;
   }
 
@@ -133,81 +142,69 @@ function reset_vlc_stream()
   ws_control.sendMessage("R");
 }
 
-function signal_tune(_frequency, _symbolrate)
-{
+function signal_tune(_frequency, _symbolrate) {
   longmynd_tune(_frequency, _symbolrate);
 }
 
-function longmynd_tune(_frequency, _symbolrate)
-{
-  _frequency = (_frequency * 1000) - lo_frequency;
+function longmynd_tune(_frequency, _symbolrate) {
+  _frequency = _frequency * 1000 - lo_frequency;
 
-  ws_control.sendMessage("C"+_frequency+","+_symbolrate);
+  ws_control.sendMessage("C" + _frequency + "," + _symbolrate);
   reset_vlc_stream();
 }
 
-function longmynd_lnbv(_enabled, _horizontal)
-{
-  ws_control.sendMessage("V"+(_enabled ? 1 : 0)+","+(_horizontal ? 1 : 0));
+function longmynd_lnbv(_enabled, _horizontal) {
+  ws_control.sendMessage(
+    "V" + (_enabled ? 1 : 0) + "," + (_horizontal ? 1 : 0),
+  );
 
-  if(_enabled && vlc_control_autoreset)
-  {
+  if (_enabled && vlc_control_autoreset) {
     reset_vlc_stream();
   }
 }
 
-function longmynd_rfport(_rfport_index)
-{
-  ws_control.sendMessage("T"+_rfport_index);
+function longmynd_rfport(_rfport_index) {
+  ws_control.sendMessage("T" + _rfport_index);
   reset_vlc_stream();
 }
 
-function longmynd_udpts(_udp_host, _udp_port)
-{
-  ws_control.sendMessage("U"+_udp_host+':'+_udp_port);
+function longmynd_udpts(_udp_host, _udp_port) {
+  ws_control.sendMessage("U" + _udp_host + ":" + _udp_port);
   reset_vlc_stream();
 }
 
-function is_valid_vlc_endpoint(_value)
-{
-  var match = _value.match(/^((1?\d?\d|25[0-5]|2[0-4]\d)\.){3}(1?\d?\d|25[0-5]|2[0-4]\d)(:[1-9]\d{0,4})?$/);
-  if(match == null)
-  {
+function is_valid_vlc_endpoint(_value) {
+  var match = _value.match(
+    /^((1?\d?\d|25[0-5]|2[0-4]\d)\.){3}(1?\d?\d|25[0-5]|2[0-4]\d)(:[1-9]\d{0,4})?$/,
+  );
+  if (match == null) {
     return false;
   }
   return true;
 }
 
-function load_settings()
-{
-  if(typeof(Storage) !== "undefined")
-  {
+function load_settings() {
+  if (typeof Storage !== "undefined") {
     var storage_lo_frequency = localStorage.getItem("longmynd-lo-frequency");
-    if(storage_lo_frequency != null)
-    {
-      try
-      {
+    if (storage_lo_frequency != null) {
+      try {
         lo_frequency = JSON.parse(storage_lo_frequency);
 
         $("#input-frequency-lo").val(lo_frequency);
-      }
-      catch(e)
-      {
+      } catch (e) {
         console.log("Error parsing storage_lo_frequency!", e);
       }
     }
 
     /* VLC autoreset enabled state is saved, but endpoint is from server */
-    var storage_vlc_control_autoreset = localStorage.getItem("longmynd-vlc-control-autoreset");
-    if(storage_vlc_control_autoreset != null)
-    {
-      try
-      {
+    var storage_vlc_control_autoreset = localStorage.getItem(
+      "longmynd-vlc-control-autoreset",
+    );
+    if (storage_vlc_control_autoreset != null) {
+      try {
         var _vlc_control_autoreset = JSON.parse(storage_vlc_control_autoreset);
         vlc_control_autoreset = _vlc_control_autoreset["enabled"];
-      }
-      catch(e)
-      {
+      } catch (e) {
         console.log("Error parsing storage_vlc_control_autoreset!", e);
       }
     }
@@ -217,29 +214,29 @@ function load_settings()
 
     /* Ensure readonly state matches enabled state */
     if (vlc_control_autoreset) {
-      $('#input-vlcautoreset-ip').prop("readonly", false);
+      $("#input-vlcautoreset-ip").prop("readonly", false);
     } else {
-      $('#input-vlcautoreset-ip').prop("readonly", true);
+      $("#input-vlcautoreset-ip").prop("readonly", true);
     }
   }
 }
 
-function save_settings()
-{
-  if(typeof(Storage) !== "undefined")
-  {
+function save_settings() {
+  if (typeof Storage !== "undefined") {
     var _vlc_control_autoreset = {
-      "enabled": vlc_control_autoreset,
-      "endpoint": vlc_control_autoreset_endpoint
+      enabled: vlc_control_autoreset,
+      endpoint: vlc_control_autoreset_endpoint,
     };
-    localStorage.setItem("longmynd-vlc-control-autoreset", JSON.stringify(_vlc_control_autoreset));
+    localStorage.setItem(
+      "longmynd-vlc-control-autoreset",
+      JSON.stringify(_vlc_control_autoreset),
+    );
 
     localStorage.setItem("longmynd-lo-frequency", JSON.stringify(lo_frequency));
   }
 }
 
-function longmynd_render_status(data_json)
-{
+function longmynd_render_status(data_json) {
   var status_obj;
   var status_packet;
 
@@ -252,70 +249,65 @@ function longmynd_render_status(data_json)
 
   try {
     status_obj = JSON.parse(data_json);
-    if(status_obj != null)
-    {
+    if (status_obj != null) {
       rx_status = status_obj.packet.rx;
 
       /* Read VLC config from server */
-      if(rx_status.vlc_password !== undefined && rx_status.vlc_password.length > 0)
-      {
+      if (
+        rx_status.vlc_password !== undefined &&
+        rx_status.vlc_password.length > 0
+      ) {
         vlc_control_password = rx_status.vlc_password;
       }
-      if(rx_status.vlc_port !== undefined && rx_status.vlc_port > 0)
-      {
-        vlc_control_autoreset_endpoint = '127.0.0.1:' + Math.round(rx_status.vlc_port);
+      if (rx_status.vlc_port !== undefined && rx_status.vlc_port > 0) {
+        vlc_control_autoreset_endpoint =
+          "127.0.0.1:" + Math.round(rx_status.vlc_port);
         $("#input-vlcautoreset-ip").val(vlc_control_autoreset_endpoint);
       }
 
       console.log(rx_status);
 
-      if(rx_status.demod_state == 2)
-      {
+      if (rx_status.demod_state == 2) {
         /* Header.. */
         $("#badge-state")
-            .removeClass("badge-light badge-success")
-            .addClass("badge badge-warning")
-            .text(demod_state_lookup[rx_status.demod_state]);
-      }
-      else if(rx_status.demod_state > 2)
-      {
+          .removeClass("badge-light badge-success")
+          .addClass("badge badge-warning")
+          .text(demod_state_lookup[rx_status.demod_state]);
+      } else if (rx_status.demod_state > 2) {
         /* Demod! */
         $("#badge-state")
-            .removeClass("badge-light badge-warning")
-            .addClass("badge badge-success")
-            .text(demod_state_lookup[rx_status.demod_state]);
-      }
-      else
-      {
+          .removeClass("badge-light badge-warning")
+          .addClass("badge badge-success")
+          .text(demod_state_lookup[rx_status.demod_state]);
+      } else {
         /* Init / Hunt */
         $("#badge-state")
-            .removeClass("badge-success badge-warning")
-            .addClass("badge badge-light")
-            .text(demod_state_lookup[rx_status.demod_state]);
+          .removeClass("badge-success badge-warning")
+          .addClass("badge badge-light")
+          .text(demod_state_lookup[rx_status.demod_state]);
       }
 
-      $("#span-status-frequency").text(format_frequency_mhz(rx_status.frequency + lo_frequency));
-      $("#span-status-if-frequency").text(format_frequency_mhz((rx_status.frequency + lo_frequency) - lo_frequency));
-      $("#span-status-symbolrate").text((rx_status.symbolrate / 1000.0)+"KS");
+      $("#span-status-frequency").text(
+        format_frequency_mhz(rx_status.frequency + lo_frequency),
+      );
+      $("#span-status-if-frequency").text(
+        format_frequency_mhz(rx_status.frequency + lo_frequency - lo_frequency),
+      );
+      $("#span-status-symbolrate").text(rx_status.symbolrate / 1000.0 + "KS");
 
-      if(rx_status.rfport == 0)
-      {
+      if (rx_status.rfport == 0) {
         $("#button-port-bottom").removeClass("active");
         $("#button-port-bottom > input")[0].checked = false;
 
-        $("#button-port-top").addClass("active")
+        $("#button-port-top").addClass("active");
         $("#button-port-top > input")[0].checked = true;
-      }
-      else if(rx_status.rfport == 1)
-      {
+      } else if (rx_status.rfport == 1) {
         $("#button-port-top").removeClass("active");
         $("#button-port-top > input")[0].checked = false;
 
-        $("#button-port-bottom").addClass("active")
+        $("#button-port-bottom").addClass("active");
         $("#button-port-bottom > input")[0].checked = true;
-      }
-      else
-      {
+      } else {
         /* Input Unknown */
         $("#button-port-top").removeClass("active");
         $("#button-port-top > input")[0].checked = false;
@@ -323,295 +315,283 @@ function longmynd_render_status(data_json)
         $("#button-port-bottom > input")[0].checked = false;
       }
 
-      if(rx_status.lnb_voltage_enabled)
-      {
-        if(rx_status.lnb_voltage_polarisation_h)
-        {
-          $("#button-lnbv-0v").removeClass("active")
+      if (rx_status.lnb_voltage_enabled) {
+        if (rx_status.lnb_voltage_polarisation_h) {
+          $("#button-lnbv-0v").removeClass("active");
           $("#button-lnbv-0v > input")[0].checked = false;
 
-          $("#button-lnbv-12v").removeClass("active")
+          $("#button-lnbv-12v").removeClass("active");
           $("#button-lnbv-12v > input")[0].checked = false;
 
-          $("#button-lnbv-18v").addClass("active")
+          $("#button-lnbv-18v").addClass("active");
           $("#button-lnbv-18v > input")[0].checked = true;
-        }
-        else
-        {
-          $("#button-lnbv-0v").removeClass("active")
+        } else {
+          $("#button-lnbv-0v").removeClass("active");
           $("#button-lnbv-0v > input")[0].checked = false;
 
-          $("#button-lnbv-12v").addClass("active")
+          $("#button-lnbv-12v").addClass("active");
           $("#button-lnbv-12v > input")[0].checked = true;
 
-          $("#button-lnbv-18v").removeClass("active")
+          $("#button-lnbv-18v").removeClass("active");
           $("#button-lnbv-18v > input")[0].checked = false;
         }
-      }
-      else
-      {
-        $("#button-lnbv-0v").addClass("active")
+      } else {
+        $("#button-lnbv-0v").addClass("active");
         $("#button-lnbv-0v > input")[0].checked = true;
 
-        $("#button-lnbv-12v").removeClass("active")
+        $("#button-lnbv-12v").removeClass("active");
         $("#button-lnbv-12v > input")[0].checked = false;
 
-        $("#button-lnbv-18v").removeClass("active")
+        $("#button-lnbv-18v").removeClass("active");
         $("#button-lnbv-18v > input")[0].checked = false;
       }
 
-      if(rx_status.demod_state == 3) // DVB-S
+      if (rx_status.demod_state == 3) // DVB-S
       {
         $("#span-status-modcod").text(modcod_lookup_dvbs[rx_status.modcod]);
-      }
-      else if(rx_status.demod_state == 4) // DVB-S2
+      } else if (rx_status.demod_state == 4) // DVB-S2
       {
         $("#span-status-modcod").text(modcod_lookup_dvbs2[rx_status.modcod]);
-      }
-      else
-      {
+      } else {
         $("#span-status-modcod").text("");
       }
-      $("#progressbar-mer").css('width', (rx_status.mer/3.1)+'%').attr('aria-valuenow', rx_status.mer).text(rx_status.mer/10.0+"dB");
-      $("#progressbar-ber").css('width', (rx_status.ber)+'%').attr('aria-valuenow', rx_status.ber).text(rx_status.ber/10.0+"%");
+      $("#progressbar-mer")
+        .css("width", rx_status.mer / 3.1 + "%")
+        .attr("aria-valuenow", rx_status.mer)
+        .text(rx_status.mer / 10.0 + "dB");
+      $("#progressbar-ber")
+        .css("width", rx_status.ber + "%")
+        .attr("aria-valuenow", rx_status.ber)
+        .text(rx_status.ber / 10.0 + "%");
 
-      if(rx_status.errors_bch_count > 0)
-      {
-        if(rx_status.errors_bch_uncorrected == true)
-        {
+      if (rx_status.errors_bch_count > 0) {
+        if (rx_status.errors_bch_uncorrected == true) {
           $("#span-status-errors-bch")
             .removeClass("badge-warning badge-success")
             .addClass("badge badge-danger")
-            .text(rx_status.errors_bch_count.toString().padStart(3, '\xa0'));
-        }
-        else
-        {
+            .text(rx_status.errors_bch_count.toString().padStart(3, "\xa0"));
+        } else {
           $("#span-status-errors-bch")
             .removeClass("badge-danger badge-success")
             .addClass("badge badge-warning")
-            .text(rx_status.errors_bch_count.toString().padStart(3, '\xa0'));
+            .text(rx_status.errors_bch_count.toString().padStart(3, "\xa0"));
         }
-      }
-      else
-      {
+      } else {
         $("#span-status-errors-bch")
           .removeClass("badge-danger badge-warning")
           .addClass("badge badge-success")
-          .text(rx_status.errors_bch_count.toString().padStart(3, '\xa0'));
+          .text(rx_status.errors_bch_count.toString().padStart(3, "\xa0"));
       }
 
       $("#span-status-errors-ldpc")
         .addClass("badge badge-light")
-        .text(rx_status.errors_ldpc_count.toString().padStart(4, '\xa0'));
+        .text(rx_status.errors_ldpc_count.toString().padStart(4, "\xa0"));
 
       ts_status = status_obj.packet.ts;
+
+      let format_bitrate = function (bps) {
+        if (bps >= 1000000) return (bps / 1000000.0).toFixed(2) + " Mbps";
+        if (bps >= 1000) return (bps / 1000.0).toFixed(1) + " Kbps";
+        return bps + " bps";
+      };
+
+      $("#span-status-bitrate-total").text(
+        format_bitrate(ts_status.bitrate_total),
+      );
+      $("#span-status-bitrate-useful").text(
+        format_bitrate(ts_status.bitrate_useful),
+      );
 
       $("#span-status-name").text(ts_status.service_name);
       $("#span-status-provider").text(ts_status.service_provider_name);
 
-      var ulTsPids = $('<ul />');
-      for (pid in ts_status.PIDs) {
-        $('<li />')
-          .text(ts_status.PIDs[pid][0]+": "+mpeg_type_lookup[ts_status.PIDs[pid][1]])
-          .appendTo(ulTsPids);
-      }
       $("#div-ts-pids").empty();
-      $("#div-ts-pids").append(ulTsPids);
+      for (pid in ts_status.PIDs) {
+        let type_label = mpeg_type_lookup[ts_status.PIDs[pid][1]];
+        if (type_label === undefined) type_label = "Unknown";
+        let occupancy = ts_status.PIDs[pid][2]
+          ? (ts_status.PIDs[pid][2] / 10.0).toFixed(1) + "%"
+          : "0%";
+        $("<div />")
+          .css("margin-left", "10px")
+          .text(ts_status.PIDs[pid][0] + " (" + occupancy + "): " + type_label)
+          .appendTo($("#div-ts-pids"));
+      }
 
-      $("#progressbar-density").css('width', (100.0 - ts_status.null_ratio)+'%').attr('aria-valuenow', (100.0 - ts_status.null_ratio)).text((100.0 - ts_status.null_ratio)+"%");
+      $("#progressbar-density")
+        .css("width", 100.0 - ts_status.null_ratio + "%")
+        .attr("aria-valuenow", 100.0 - ts_status.null_ratio)
+        .text((100.0 - ts_status.null_ratio).toFixed(1) + "%");
 
       /* Scan mode */
-      if(tuning_mode_scan && signals.length > 1)
-      {
+      if (tuning_mode_scan && signals.length > 1) {
         /* Check if we're demodulating, and have a Service Name */
-        if(rx_status.demod_state >= 3 && ts_status.service_name.length > 0)
-        {
-          scan_last_lock_timestamp = (Date.now());
+        if (rx_status.demod_state >= 3 && ts_status.service_name.length > 0) {
+          scan_last_lock_timestamp = Date.now();
           /* Check we don't have one already */
           var k;
-          for(k = 0; k < signals_decoded.length; k++)
-          {
-            if(ts_status.service_name == signals_decoded[k].name
-              || (signals_decoded[k].frequency > (rx_status.frequency + lo_frequency)/1000.0 - 0.06
-                && signals_decoded[k].frequency < (rx_status.frequency + lo_frequency)/1000.0 + 0.06))
-            {
+          for (k = 0; k < signals_decoded.length; k++) {
+            if (
+              ts_status.service_name == signals_decoded[k].name ||
+              (signals_decoded[k].frequency >
+                (rx_status.frequency + lo_frequency) / 1000.0 - 0.06 &&
+                signals_decoded[k].frequency <
+                  (rx_status.frequency + lo_frequency) / 1000.0 + 0.06)
+            ) {
               /* Update it */
               signals_decoded[k].name = ts_status.service_name;
-              signals_decoded[k].frequency = (rx_status.frequency + lo_frequency)/1000.0;
-              signals_decoded[k].last_seen = (Date.now());
+              signals_decoded[k].frequency =
+                (rx_status.frequency + lo_frequency) / 1000.0;
+              signals_decoded[k].last_seen = Date.now();
 
               break;
             }
           }
-          if(k == signals_decoded.length)
-          {
+          if (k == signals_decoded.length) {
             /* Not found, new or changed so add */
             signals_decoded.push({
-              "name": ts_status.service_name,
-              "frequency": (rx_status.frequency + lo_frequency)/1000.0,
-              "last_seen": (Date.now())
+              name: ts_status.service_name,
+              frequency: (rx_status.frequency + lo_frequency) / 1000.0,
+              last_seen: Date.now(),
             });
           }
 
           /* Advance to next signal */
           scan_signals_index = scan_signals_index + 1;
-          if(scan_signals_index >= signals.length)
-          {
+          if (scan_signals_index >= signals.length) {
             scan_signals_index = 0;
           }
 
-          signal_tune(signals[scan_signals_index].frequency, signals[scan_signals_index].symbolrate);
-        }
-        else if(scan_last_lock_timestamp < ((Date.now())-6*1000))
-        {
+          signal_tune(
+            signals[scan_signals_index].frequency,
+            signals[scan_signals_index].symbolrate,
+          );
+        } else if (scan_last_lock_timestamp < Date.now() - 6 * 1000) {
           /* More than 6s trying to find the station, move on */
-          scan_last_lock_timestamp = (Date.now());
+          scan_last_lock_timestamp = Date.now();
 
           signals_decoded.push({
-              "name": "??",
-              "frequency": (rx_status.frequency + lo_frequency)/1000.0,
-              "last_seen": (Date.now())
-            });
+            name: "??",
+            frequency: (rx_status.frequency + lo_frequency) / 1000.0,
+            last_seen: Date.now(),
+          });
 
           /* Advance to next signal */
           scan_signals_index = scan_signals_index + 1;
-          if(scan_signals_index >= signals.length)
-          {
+          if (scan_signals_index >= signals.length) {
             scan_signals_index = 0;
           }
 
-          signal_tune(signals[scan_signals_index].frequency, signals[scan_signals_index].symbolrate);
+          signal_tune(
+            signals[scan_signals_index].frequency,
+            signals[scan_signals_index].symbolrate,
+          );
         }
       }
     }
-  }
-  catch(e)
-  {
-    console.log("Error parsing message!",e);
+  } catch (e) {
+    console.log("Error parsing message!", e);
   }
 }
 
-var ip_address_regex =/^(?!0)(?!.*\.$)((1?\d?\d|25[0-5]|2[0-4]\d)(\.|$)){4}$/;
-$(document).ready(function()
-{
+var ip_address_regex = /^(?!0)(?!.*\.$)((1?\d?\d|25[0-5]|2[0-4]\d)(\.|$)){4}$/;
+$(document).ready(function () {
   load_settings();
 
-  $('#input-frequency-lo').val(lo_frequency);
-  $('#input-vlcautoreset-enable').prop("checked", vlc_control_autoreset);
-  $('#input-vlcautoreset-ip').val(vlc_control_autoreset_endpoint);
-  $('#input-vlcautoreset-ip').removeClass("is-invalid");
+  $("#input-frequency-lo").val(lo_frequency);
+  $("#input-vlcautoreset-enable").prop("checked", vlc_control_autoreset);
+  $("#input-vlcautoreset-ip").val(vlc_control_autoreset_endpoint);
+  $("#input-vlcautoreset-ip").removeClass("is-invalid");
 
-
-  $('#input-frequency-lo').keyup(function()
-  {
-    var inputInt = parseInt($('#input-frequency-lo').val());
-    if(!isNaN(inputInt))
-    {
-      $('#input-frequency-lo').removeClass("is-invalid");
+  $("#input-frequency-lo").keyup(function () {
+    var inputInt = parseInt($("#input-frequency-lo").val());
+    if (!isNaN(inputInt)) {
+      $("#input-frequency-lo").removeClass("is-invalid");
       lo_frequency = inputInt;
       save_settings();
-    }
-    else
-    {
-      $('#input-frequency-lo').addClass("is-invalid");
+    } else {
+      $("#input-frequency-lo").addClass("is-invalid");
     }
   });
 
-  $('#input-vlcautoreset-enable').change(function()
-  {
+  $("#input-vlcautoreset-enable").change(function () {
     if (this.checked) {
       vlc_control_autoreset = true;
-      $('#input-vlcautoreset-ip').prop("readonly", false);
+      $("#input-vlcautoreset-ip").prop("readonly", false);
     } else {
       vlc_control_autoreset = false;
-      $('#input-vlcautoreset-ip').prop("readonly", true);
+      $("#input-vlcautoreset-ip").prop("readonly", true);
     }
     save_settings();
   });
 
-  $('#input-vlcautoreset-ip').keyup(function()
-  {
-    if(is_valid_vlc_endpoint($('#input-vlcautoreset-ip').val()))
-    {
-      $('#input-vlcautoreset-ip').removeClass("is-invalid");
-      vlc_control_autoreset_endpoint = $('#input-vlcautoreset-ip').val();
+  $("#input-vlcautoreset-ip").keyup(function () {
+    if (is_valid_vlc_endpoint($("#input-vlcautoreset-ip").val())) {
+      $("#input-vlcautoreset-ip").removeClass("is-invalid");
+      vlc_control_autoreset_endpoint = $("#input-vlcautoreset-ip").val();
       save_settings();
-    }
-    else
-    {
-      $('#input-vlcautoreset-ip').addClass("is-invalid");
+    } else {
+      $("#input-vlcautoreset-ip").addClass("is-invalid");
     }
   });
 
-  $('#button-vlc-reset').click(function()
-  {
+  $("#button-vlc-reset").click(function () {
     reset_vlc_stream();
   });
 
-  $('#button-tune-click').click(function()
-  {
+  $("#button-tune-click").click(function () {
     tuning_mode_scan = false;
-    $("#button-tune-click").addClass("active")
+    $("#button-tune-click").addClass("active");
     $("#button-tune-click > input")[0].checked = true;
 
-    $("#button-tune-scan").removeClass("active")
+    $("#button-tune-scan").removeClass("active");
     $("#button-tune-scan > input")[0].checked = false;
   });
-  $('#button-tune-scan').click(function()
-  {
+  $("#button-tune-scan").click(function () {
     tuning_mode_scan = true;
-    $("#button-tune-scan").addClass("active")
+    $("#button-tune-scan").addClass("active");
     $("#button-tune-scan > input")[0].checked = true;
 
-    $("#button-tune-click").removeClass("active")
+    $("#button-tune-click").removeClass("active");
     $("#button-tune-click > input")[0].checked = false;
   });
 
-  $('#button-lnbv-0v').click(function()
-  {
+  $("#button-lnbv-0v").click(function () {
     longmynd_lnbv(false, false);
   });
-  $('#button-lnbv-12v').click(function()
-  {
+  $("#button-lnbv-12v").click(function () {
     longmynd_lnbv(true, false);
   });
-  $('#button-lnbv-18v').click(function()
-  {
+  $("#button-lnbv-18v").click(function () {
     longmynd_lnbv(true, true);
   });
 
-  $('#button-port-top').click(function()
-  {
+  $("#button-port-top").click(function () {
     longmynd_rfport(0);
   });
-  $('#button-port-bottom').click(function()
-  {
+  $("#button-port-bottom").click(function () {
     longmynd_rfport(1);
   });
 
-  $('#button-udpts-submit').click(function()
-  {
+  $("#button-udpts-submit").click(function () {
     var udpts_host;
     var udpts_port;
-    if(ip_address_regex.test($('#input-udpts-host').val()))
-    {
-      $('#input-udpts-host').removeClass("is-invalid");
-      udpts_host = $('#input-udpts-host').val();
+    if (ip_address_regex.test($("#input-udpts-host").val())) {
+      $("#input-udpts-host").removeClass("is-invalid");
+      udpts_host = $("#input-udpts-host").val();
 
-      if($('#input-udpts-port').val() < 65535 && $('#input-udpts-port').val() > 1024)
-      {
-        udpts_port = $('#input-udpts-port').val();
+      if (
+        $("#input-udpts-port").val() < 65535 &&
+        $("#input-udpts-port").val() > 1024
+      ) {
+        udpts_port = $("#input-udpts-port").val();
 
         longmynd_udpts(udpts_host, udpts_port);
+      } else {
+        $("#input-udpts-port").addClass("is-invalid");
       }
-      else
-      {
-        $('#input-udpts-port').addClass("is-invalid");
-      }
-    }
-    else
-    {
-      $('#input-udpts-host').addClass("is-invalid");
+    } else {
+      $("#input-udpts-host").addClass("is-invalid");
     }
   });
 
@@ -619,13 +599,10 @@ $(document).ready(function()
   ws_control = new strWebsocket(ws_longmynd_url, "control", ws_control_buffer);
 
   /* Set up listener for websocket */
-  render_timer = setInterval(function()
-  {
-    if(!render_busy)
-    {
+  render_timer = setInterval(function () {
+    if (!render_busy) {
       render_busy = true;
-      if(ws_monitor_buffer.length > 0)
-      {
+      if (ws_monitor_buffer.length > 0) {
         /* Pull newest data off the buffer and render it */
         var data_frame = ws_monitor_buffer.pop();
 
@@ -634,22 +611,22 @@ $(document).ready(function()
         ws_monitor_buffer.length = 0;
       }
       render_busy = false;
-    }
-    else
-    {
-      console.log("Slow render blocking next frame, configured interval is ", render_interval);
+    } else {
+      console.log(
+        "Slow render blocking next frame, configured interval is ",
+        render_interval,
+      );
     }
   }, render_interval);
 
-  scan_cull_timer = setInterval(function()
-  {
+  scan_cull_timer = setInterval(function () {
     /* Scan for old decoded and remove */
-    var _ts_now = (Date.now()) - (30*1000);
-    for(var k = 0; k < signals_decoded.length; k++)
-    {
-      if(signals_decoded[k].last_seen < (_ts_now - (30*1000))
-        || (signals_decoded[k].name == "??" && (_ts_now - (5*1000))))
-      {
+    var _ts_now = Date.now() - 30 * 1000;
+    for (var k = 0; k < signals_decoded.length; k++) {
+      if (
+        signals_decoded[k].last_seen < _ts_now - 30 * 1000 ||
+        (signals_decoded[k].name == "??" && _ts_now - 5 * 1000)
+      ) {
         signals_decoded.splice(k, 1);
       }
     }
@@ -658,23 +635,21 @@ $(document).ready(function()
 
 /* Override render_signal_selected_box from eshail.batc.org.uk/wb/index.js
    to fix bug where mouse_y was used instead of mouse_clicked_y. */
-render_signal_selected_box = function(mouse_clicked_x, mouse_clicked_y)
-{
-  if(mouse_clicked_y < (canvasHeight * 7/8))
-  {
-    for(i=0; i<signals.length; i++)
-    {
-      if(mouse_clicked_x > signals[i].start
-        && mouse_clicked_x < signals[i].end
-        && mouse_clicked_y > signals[i].top)
-      {
+render_signal_selected_box = function (mouse_clicked_x, mouse_clicked_y) {
+  if (mouse_clicked_y < (canvasHeight * 7) / 8) {
+    for (i = 0; i < signals.length; i++) {
+      if (
+        mouse_clicked_x > signals[i].start &&
+        mouse_clicked_x < signals[i].end &&
+        mouse_clicked_y > signals[i].top
+      ) {
         signal_selected = signals[i];
 
         ctx.save();
         ctx.lineWidth = 3;
-        ctx.strokeStyle = 'white';
+        ctx.strokeStyle = "white";
         ctx.beginPath();
-        ctx.moveTo(signal_selected.start, canvasHeight * (7/8));
+        ctx.moveTo(signal_selected.start, canvasHeight * (7 / 8));
         ctx.lineTo(signal_selected.start, signal_selected.top);
         ctx.stroke();
         ctx.beginPath();
@@ -682,7 +657,7 @@ render_signal_selected_box = function(mouse_clicked_x, mouse_clicked_y)
         ctx.lineTo(signal_selected.end, signal_selected.top);
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(signal_selected.end, canvasHeight * (7/8));
+        ctx.moveTo(signal_selected.end, canvasHeight * (7 / 8));
         ctx.lineTo(signal_selected.end, signal_selected.top);
         ctx.stroke();
         ctx.restore();
