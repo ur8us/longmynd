@@ -1,5 +1,5 @@
 BIN = longmynd
-SRC = main.c nim.c ftdi.c stv0910.c stv0910_utils.c stv0903.c stvvglna.c stvvglna_utils.c stv6120.c stv6120_utils.c stb6100.c ftdi_usb.c fifo.c udp.c beep.c ts.c web/web.c
+SRC = main.c nim.c ftdi.c stv0910.c stv0910_utils.c stv0903.c stvvglna.c stvvglna_utils.c stv6120.c stv6120_utils.c stb6100.c ftdi_usb.c fifo.c udp.c beep.c ts.c ts_stats.c web/web.c
 OBJ = ${SRC:.c=.o}
 DEP := ${SRC:.c=.d}
 
@@ -17,6 +17,9 @@ LWS_OBJDIR = ${LWS_DIR}/build/lib
 
 all: check-gitsubmodules check-lws ${BIN} fake_read
 
+test: tests/test_ts_stats
+	@./tests/test_ts_stats
+
 debug: COPT = -Og
 debug: CFLAGS += -ggdb -fno-omit-frame-pointer
 debug: all
@@ -27,6 +30,10 @@ werror: all
 fake_read:
 	@echo "  CC     "$@
 	@${CC} fake_read.c -o $@
+
+tests/test_ts_stats: tests/test_ts_stats.c ts_stats.c ts_stats.h ts.h
+	@echo "  CC     "$@
+	@${CC} ${CFLAGS} -I . -o $@ tests/test_ts_stats.c ts_stats.c
 
 $(BIN): ${OBJ}
 	@echo "  LD     "$@
@@ -39,7 +46,7 @@ $(BIN): ${OBJ}
 -include $(DEP)
 
 clean:
-	@rm -rf ${BIN} fake_read ${OBJ} ${DEP}
+	@rm -rf ${BIN} fake_read tests/test_ts_stats ${OBJ} ${DEP}
 
 check-gitsubmodules:
 	@if git submodule status | egrep -q '^[-]|^[+]' ; then \
@@ -62,4 +69,4 @@ check-lws:
 tags:
 	@ctags *
 
-.PHONY: all clean check-gitsubmodules check-lws tags
+.PHONY: all test clean check-gitsubmodules check-lws tags

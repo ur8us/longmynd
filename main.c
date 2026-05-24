@@ -846,6 +846,50 @@ int main(int argc, char *argv[]) {
         status_string_write = fifo_status_string_write;
     }
 
+    if (err==ERROR_NONE) {
+        pthread_mutex_lock(&longmynd_status.mutex);
+        longmynd_status.nim_model = longmynd_config.nim_model;
+        longmynd_status.rfport_index = longmynd_config.port_swap ? 1 : 0;
+        longmynd_status.frequency_requested = longmynd_config.freq_requested;
+        longmynd_status.symbolrate_requested = longmynd_config.sr_requested;
+        longmynd_status.polarisation_supply = longmynd_config.polarisation_supply;
+        longmynd_status.polarisation_horizontal = longmynd_config.polarisation_horizontal;
+        longmynd_status.tuner_gain = longmynd_config.tuner_gain;
+        longmynd_status.ts_use_ip = longmynd_config.ts_use_ip;
+        strncpy(longmynd_status.ts_fifo_path, longmynd_config.ts_fifo_path, sizeof(longmynd_status.ts_fifo_path)-1);
+        longmynd_status.ts_fifo_path[sizeof(longmynd_status.ts_fifo_path)-1] = '\0';
+        strncpy(longmynd_status.ts_ip_addr, longmynd_config.ts_ip_addr, sizeof(longmynd_status.ts_ip_addr)-1);
+        longmynd_status.ts_ip_addr[sizeof(longmynd_status.ts_ip_addr)-1] = '\0';
+        longmynd_status.ts_ip_port = longmynd_config.ts_ip_port;
+        strncpy(longmynd_status.vlc_password, longmynd_config.vlc_password, sizeof(longmynd_status.vlc_password)-1);
+        longmynd_status.vlc_password[sizeof(longmynd_status.vlc_password)-1] = '\0';
+        longmynd_status.vlc_port = longmynd_config.vlc_port;
+        longmynd_status.last_updated_monotonic = monotonic_ms();
+        pthread_cond_signal(&longmynd_status.signal);
+        pthread_mutex_unlock(&longmynd_status.mutex);
+    }
+
+    thread_vars_t thread_vars_web = {
+        .main_err_ptr = &err,
+        .thread_err = ERROR_NONE,
+        .config = &longmynd_config,
+        .status = &longmynd_status
+    };
+    bool web_thread_started = false;
+
+    if(err==ERROR_NONE && longmynd_config.web_enabled)
+    {
+        if(0 != pthread_create(&thread_web, NULL, loop_web, (void *)&thread_vars_web))
+        {
+            fprintf(stderr, "Error creating loop_web pthread\n");
+        }
+        else
+        {
+            pthread_setname_np(thread_web, "Web Server");
+            web_thread_started = true;
+        }
+    }
+
     if (err==ERROR_NONE) err=ftdi_init(longmynd_config.device_usb_bus, longmynd_config.device_usb_addr);
 
     thread_vars_t thread_vars_ts = {
@@ -910,27 +954,6 @@ int main(int argc, char *argv[]) {
     else
     {
         pthread_setname_np(thread_beep, "Beep Audio");
-    }
-
-    thread_vars_t thread_vars_web = {
-        .main_err_ptr = &err,
-        .thread_err = ERROR_NONE,
-        .config = &longmynd_config,
-        .status = &longmynd_status
-    };
-    bool web_thread_started = false;
-
-    if(longmynd_config.web_enabled)
-    {
-        if(0 != pthread_create(&thread_web, NULL, loop_web, (void *)&thread_vars_web))
-        {
-            fprintf(stderr, "Error creating loop_web pthread\n");
-        }
-        else
-        {
-            pthread_setname_np(thread_web, "Web Server");
-            web_thread_started = true;
-        }
     }
 
     uint64_t last_status_sent_monotonic = 0;

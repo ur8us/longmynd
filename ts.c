@@ -29,14 +29,15 @@
 #include "ftdi.h"
 #include "ftdi_usb.h"
 #include "ts.h"
+#include "ts_stats.h"
 
 #define TS_FRAME_SIZE 20*512 // 512 is base USB FTDI frame
 #define TS_FILTER_BUFFER_SIZE (TS_FRAME_SIZE + (TS_PACKET_SIZE * 2))
 
-#define MAX_PID  8192
+#define MAX_PID  LONGMYND_TS_MAX_PID
 
-#define TS_PACKET_SIZE 188
-#define TS_HEADER_SYNC 0x47
+#define TS_PACKET_SIZE LONGMYND_TS_PACKET_SIZE
+#define TS_HEADER_SYNC LONGMYND_TS_HEADER_SYNC
 
 #define TS_PID_PAT 0x0000
 #define TS_PID_SDT 0x0011
@@ -46,6 +47,7 @@
 #define TS_TABLE_PMT 0x02
 #define TS_TABLE_SDT 0x42
 #define TS_LOCK_SETTLE_MS 750
+#define TS_LOCK_METADATA_WAIT_MS 2000
 
 uint8_t *ts_buffer_ptr = NULL;
 bool ts_buffer_waiting;
@@ -212,6 +214,7 @@ void *loop_ts(void *arg) {
     uint8_t (*ts_write)(uint8_t*,uint32_t);
     bool ts_wait_for_lock = true;
     uint64_t ts_release_after_ms = 0;
+    uint64_t ts_force_release_after_ms = 0;
     uint8_t continuity_next[MAX_PID] = {0};
     bool continuity_valid[MAX_PID] = {0};
     uint8_t pending_bytes[TS_PACKET_SIZE * 2];
@@ -268,6 +271,7 @@ void *loop_ts(void *arg) {
             status_clear_ts(status);
             ts_wait_for_lock = true;
             ts_release_after_ms = 0;
+            ts_force_release_after_ms = 0;
             pending_len = 0;
             memset(continuity_valid, 0, sizeof(continuity_valid));
             config->ts_reset = false;
@@ -289,6 +293,7 @@ void *loop_ts(void *arg) {
                     ts_wait_for_lock = true;
                 }
                 ts_release_after_ms = 0;
+                ts_force_release_after_ms = 0;
                 pending_len = 0;
                 memset(continuity_valid, 0, sizeof(continuity_valid));
                 continue;
@@ -340,12 +345,15 @@ void *loop_ts(void *arg) {
                 now_ms = timestamp_ms();
                 if (ts_release_after_ms == 0) {
                     ts_release_after_ms = now_ms + TS_LOCK_SETTLE_MS;
+                    ts_force_release_after_ms = now_ms + TS_LOCK_METADATA_WAIT_MS;
                 }
-                if (!transport_has_metadata || now_ms < ts_release_after_ms) {
+                if (now_ms < ts_release_after_ms
+                    || (!transport_has_metadata && now_ms < ts_force_release_after_ms)) {
                     continue;
                 }
                 ts_wait_for_lock = false;
                 ts_release_after_ms = 0;
+                ts_force_release_after_ms = 0;
             }
 
             ts_write(buffer_aligned, output_len);
@@ -389,7 +397,7 @@ void *loop_ts_parse(void *arg) {
     uint8_t *ts_buffer;
     uint32_t ts_buffer_length;
     uint8_t *ts_packet_ptr;
-    uint32_t ts_buffer_length_remaining;
+    uint32_t ts_packet_offset;
 
     /* TS Stats Vars */
     uint32_t ts_packet_total_count;
@@ -397,12 +405,14 @@ void *loop_ts_parse(void *arg) {
 
     /* Generic TS */
     uint32_t ts_pid;
-    uint32_t ts_adaption_field_flag;
+    uint32_t ts_adaptation_field_control;
     uint32_t ts_adaption_field_length;
     uint32_t ts_payload_content_offset;
     uint32_t ts_payload_content_length;
     uint8_t *ts_payload_ptr;
     uint32_t ts_payload_section_length;
+    uint32_t ts_payload_section_available;
+    bool ts_payload_start;
 
     uint32_t ts_payload_crc;
     uint32_t ts_payload_crc_c;
@@ -476,62 +486,50 @@ void *loop_ts_parse(void *arg) {
 
         pthread_mutex_unlock(&longmynd_ts_parse_buffer.mutex);
 
-        ts_packet_ptr = &ts_buffer[0];
         ts_buffer_length = longmynd_ts_parse_buffer.length;
-        ts_buffer_length_remaining = ts_buffer_length;
+        longmynd_ts_packet_stats_t packet_stats = {0, 0};
 
-        while(ts_packet_ptr != NULL)
+        longmynd_ts_packet_stats_update(ts_buffer, ts_buffer_length, pid_counts, &packet_stats);
+        ts_packet_total_count = packet_stats.total;
+        ts_packet_null_count = packet_stats.nulls;
+
+        for(ts_packet_offset = 0; ts_packet_offset + TS_PACKET_SIZE <= ts_buffer_length; ts_packet_offset += TS_PACKET_SIZE)
         {
-            if(ts_packet_ptr[0] != TS_HEADER_SYNC)
-            {
-                /* Align input to the TS sync byte */
-                ts_buffer_length_remaining = ts_buffer_length - (&ts_packet_ptr[0] - &ts_buffer[0]);
-
-                if(ts_buffer_length_remaining <= TS_PACKET_SIZE)
-                {
-                    /* Nothing more in buffer, force exit */
-                    ts_packet_ptr = NULL;
-                    continue;
-                }
-
-                ts_packet_ptr = memchr(ts_packet_ptr, TS_HEADER_SYNC, ts_buffer_length_remaining - TS_PACKET_SIZE);
-                if(ts_packet_ptr == NULL)
-                {
-                    continue;
-                }
+            ts_packet_ptr = &ts_buffer[ts_packet_offset];
+            if(ts_packet_ptr[0] != TS_HEADER_SYNC) {
+                continue;
             }
-
             ts_pid = (uint32_t)((ts_packet_ptr[1] & 0x1F) << 8) | (uint32_t)ts_packet_ptr[2];
-        
-            ts_packet_total_count++;
+            ts_payload_start = (ts_packet_ptr[1] & 0x40) != 0;
 
-            if (pid_counts != NULL) pid_counts[ts_pid]++;
-            
-            ts_payload_content_offset = 4;
-
-            ts_adaption_field_flag = (uint32_t)(ts_packet_ptr[3] & 0x20) >> 5;
-            if(ts_adaption_field_flag > 0)
-            {
-                ts_adaption_field_length = ts_packet_ptr[4];
-
-                if(ts_adaption_field_length == 0
-                    || ts_adaption_field_length > 183)
-                {
-                    /* Length invalid, packet is likely invalid */
-                    ts_packet_ptr++;
-                    continue;
-                }
-
-                ts_payload_content_offset += ts_adaption_field_length;
-            }
-            
             /* NULL/padding packets */
             if(ts_pid == TS_PID_NULL)
             {
-                ts_packet_null_count++;
-
-                ts_packet_ptr++;
                 continue;
+            }
+
+            ts_adaptation_field_control = (uint32_t)(ts_packet_ptr[3] & 0x30) >> 4;
+            if(ts_adaptation_field_control == 0 || ts_adaptation_field_control == 2)
+            {
+                continue;
+            }
+
+            ts_payload_content_offset = 4;
+            if(ts_adaptation_field_control == 3)
+            {
+                ts_adaption_field_length = ts_packet_ptr[4];
+
+                if(ts_adaption_field_length > 183)
+                {
+                    /* Length invalid, packet is likely invalid */
+                    continue;
+                }
+
+                ts_payload_content_offset += 1 + ts_adaption_field_length;
+                if(ts_payload_content_offset >= TS_PACKET_SIZE)
+                {
+                    continue;
+                }
             }
 
 #if 0
@@ -582,23 +580,47 @@ void *loop_ts_parse(void *arg) {
 #endif
             if(ts_pid == TS_PID_SDT)
             {
+                uint8_t *ts_section_end_ptr;
+                uint8_t *ts_name_length_ptr;
+                uint8_t *service_provider_name_ptr;
+                uint8_t *service_name_ptr;
+                uint32_t service_provider_name_copy_length;
+                uint32_t service_name_copy_length;
+
+                if(!ts_payload_start)
+                {
+                    continue;
+                }
+
                 ts_payload_content_length = 0;
-                ts_payload_ptr = (uint8_t *)&ts_packet_ptr[ts_payload_content_offset + 1 + ts_packet_ptr[ts_payload_content_offset]];
+                ts_payload_content_offset += 1 + ts_packet_ptr[ts_payload_content_offset];
+                if(ts_payload_content_offset >= TS_PACKET_SIZE)
+                {
+                    continue;
+                }
+
+                ts_payload_ptr = (uint8_t *)&ts_packet_ptr[ts_payload_content_offset];
+                ts_payload_section_available = TS_PACKET_SIZE - ts_payload_content_offset;
 
                 if(ts_payload_ptr[0] != TS_TABLE_SDT)
                 {
-                    ts_packet_ptr++;
+                    continue;
+                }
+
+                if(ts_payload_section_available < 3)
+                {
                     continue;
                 }
 
                 ts_payload_section_length = ((uint32_t)(ts_payload_ptr[1] & 0x0F) << 8) | (uint32_t)ts_payload_ptr[2];
                 //printf(" - SDT Section Length: %"PRIu32"\n", ts_payload_section_length);
 
-                if(ts_payload_section_length < 1)
+                if(ts_payload_section_length < 1 || (ts_payload_section_length + 3) > ts_payload_section_available)
                 {
-                    ts_packet_ptr++;
                     continue;
                 }
+
+                ts_section_end_ptr = &ts_payload_ptr[ts_payload_section_length + 3];
 
                 ts_payload_crc = ((uint32_t)ts_payload_ptr[ts_payload_section_length-1] << 24) | ((uint32_t)ts_payload_ptr[ts_payload_section_length] << 16)
                                 | ((uint32_t)ts_payload_ptr[ts_payload_section_length+1] << 8) | (uint32_t)ts_payload_ptr[ts_payload_section_length+2];
@@ -608,7 +630,11 @@ void *loop_ts_parse(void *arg) {
                 if(ts_payload_crc != ts_payload_crc_c)
                 {
                     /* CRC Fail */
-                    ts_packet_ptr++;
+                    continue;
+                }
+
+                if(&ts_payload_ptr[16] > ts_section_end_ptr)
+                {
                     continue;
                 }
 
@@ -634,21 +660,51 @@ void *loop_ts_parse(void *arg) {
 
                 ts_payload_content_length += 3;
 
+                if(&ts_packet_sdt_descriptor_ptr[4] > ts_section_end_ptr)
+                {
+                    continue;
+                }
+
                 service_provider_name_length = (uint32_t)ts_packet_sdt_descriptor_ptr[3];
                 //printf(" - - - Service Provider Name Length %"PRIu32"\n", service_provider_name_length);
                 //printf(" - - - Service Provider Name: %.*s\n", service_provider_name_length, &ts_packet_sdt_descriptor_ptr[4]);
 
-                service_name_length = (uint32_t)ts_packet_sdt_descriptor_ptr[3+1+service_provider_name_length];
+                ts_name_length_ptr = &ts_packet_sdt_descriptor_ptr[3 + 1 + service_provider_name_length];
+                if(ts_name_length_ptr >= ts_section_end_ptr)
+                {
+                    continue;
+                }
+
+                service_name_length = (uint32_t)*ts_name_length_ptr;
+                if(&ts_name_length_ptr[1 + service_name_length] > ts_section_end_ptr)
+                {
+                    continue;
+                }
                 //printf(" - - - Service Name Length %"PRIu32"\n", service_name_length);
                 //printf(" - - - Service Name: %.*s\n", service_name_length, &ts_packet_sdt_descriptor_ptr[4+1+service_provider_name_length]);
 
+                service_provider_name_ptr = &ts_packet_sdt_descriptor_ptr[4];
+                service_name_ptr = &ts_name_length_ptr[1];
+
+                service_name_copy_length = service_name_length;
+                if(service_name_copy_length >= sizeof(status->service_name))
+                {
+                    service_name_copy_length = sizeof(status->service_name) - 1;
+                }
+
+                service_provider_name_copy_length = service_provider_name_length;
+                if(service_provider_name_copy_length >= sizeof(status->service_provider_name))
+                {
+                    service_provider_name_copy_length = sizeof(status->service_provider_name) - 1;
+                }
+
                 pthread_mutex_lock(&status->mutex);
                 
-                memcpy(status->service_name, &ts_packet_sdt_descriptor_ptr[4+1+service_provider_name_length], service_name_length);
-                status->service_name[service_name_length] = '\0';
+                memcpy(status->service_name, service_name_ptr, service_name_copy_length);
+                status->service_name[service_name_copy_length] = '\0';
 
-                memcpy(status->service_provider_name, &ts_packet_sdt_descriptor_ptr[4], service_provider_name_length);
-                status->service_provider_name[service_provider_name_length] = '\0';
+                memcpy(status->service_provider_name, service_provider_name_ptr, service_provider_name_copy_length);
+                status->service_provider_name[service_provider_name_copy_length] = '\0';
 
                 pthread_mutex_unlock(&status->mutex);
 
@@ -657,25 +713,48 @@ void *loop_ts_parse(void *arg) {
                 ts_payload_content_length += 1;
                 ts_payload_content_length += service_name_length;
 
-                ts_packet_ptr++;
                 continue;
             }
             else // if(ts_pat_program_pid !=0x00 && ts_pid == ts_pat_program_pid) /* PMT, once found in PAT */
             {
-                ts_payload_ptr = (uint8_t *)&ts_packet_ptr[ts_payload_content_offset + 1 + ts_packet_ptr[ts_payload_content_offset]];
+                uint8_t *ts_section_end_ptr;
+                uint8_t *ts_pmt_es_end_ptr;
+
+                if(!ts_payload_start)
+                {
+                    continue;
+                }
+
+                ts_payload_content_offset += 1 + ts_packet_ptr[ts_payload_content_offset];
+                if(ts_payload_content_offset >= TS_PACKET_SIZE)
+                {
+                    continue;
+                }
+
+                ts_payload_ptr = (uint8_t *)&ts_packet_ptr[ts_payload_content_offset];
+                ts_payload_section_available = TS_PACKET_SIZE - ts_payload_content_offset;
 
                 /* We're not filtering by PID here yet, so we rely on filtering by table ID */
                 if(ts_payload_ptr[0] != TS_TABLE_PMT)
                 {
-                    ts_packet_ptr++;
+                    continue;
+                }
+
+                if(ts_payload_section_available < 3)
+                {
                     continue;
                 }
 
                 ts_payload_section_length = ((uint32_t)(ts_payload_ptr[1] & 0x0F) << 8) | (uint32_t)ts_payload_ptr[2];
 
-                if(ts_payload_section_length < 1)
+                if(ts_payload_section_length < 1 || (ts_payload_section_length + 3) > ts_payload_section_available)
                 {
-                    ts_packet_ptr++;
+                    continue;
+                }
+
+                ts_section_end_ptr = &ts_payload_ptr[ts_payload_section_length + 3];
+                if(&ts_payload_ptr[12] > ts_section_end_ptr)
+                {
                     continue;
                 }
 
@@ -687,7 +766,6 @@ void *loop_ts_parse(void *arg) {
                 if(ts_payload_crc != ts_payload_crc_c)
                 {
                     /* CRC Fail */
-                    ts_packet_ptr++;
                     continue;
                 }
 
@@ -702,9 +780,19 @@ void *loop_ts_parse(void *arg) {
 
                 ts_pmt_offset = 0;
                 ts_pmt_index = 0;
-                while((12+1+ts_pmt_program_info_length+ts_pmt_offset) < ts_payload_section_length)
+                ts_pmt_es_end_ptr = ts_section_end_ptr - 4;
+                while(ts_pmt_index < NUM_ELEMENT_STREAMS)
                 {
+                    if((12 + ts_pmt_program_info_length + ts_pmt_offset + 5) > ts_payload_section_length)
+                    {
+                        break;
+                    }
+
                     ts_pmt_es_ptr = &ts_payload_ptr[12 + ts_pmt_program_info_length + ts_pmt_offset];
+                    if(&ts_pmt_es_ptr[5] > ts_pmt_es_end_ptr)
+                    {
+                        break;
+                    }
 
                     /* For each elementary PID */
                     ts_pmt_es_type = (uint32_t)ts_pmt_es_ptr[0];
@@ -712,6 +800,10 @@ void *loop_ts_parse(void *arg) {
                     ts_pmt_es_pid = ((uint32_t)(ts_pmt_es_ptr[1] & 0x1F) << 8) | (uint32_t)ts_pmt_es_ptr[2];
 
                     ts_pmt_es_info_length = ((uint32_t)(ts_pmt_es_ptr[3] & 0x0F) << 8) | (uint32_t)ts_pmt_es_ptr[4];
+                    if(&ts_pmt_es_ptr[5 + ts_pmt_es_info_length] > ts_pmt_es_end_ptr)
+                    {
+                        break;
+                    }
                     //if(ts_pmt_es_info_length > 0)
                     //{
                         //printf(" - - PMT ES Info: %.*s\n", ts_pmt_es_info_length, &ts_pmt_es_ptr[5]);
@@ -728,11 +820,7 @@ void *loop_ts_parse(void *arg) {
                     ts_pmt_index++;
                 }
 
-                ts_packet_ptr++;
-                continue;
             }
-
-            ts_packet_ptr++;
         }
 
         bitrate_packet_total += ts_packet_total_count;
@@ -742,13 +830,19 @@ void *loop_ts_parse(void *arg) {
         if (now >= (last_bitrate_calc_time + 1000))
         {
             uint32_t delta_ms = (uint32_t)(now - last_bitrate_calc_time);
+            uint32_t null_pct_10 = 0;
             
             pthread_mutex_lock(&status->mutex);
-            status->ts_total_bitrate = (uint32_t)(((uint64_t)bitrate_packet_total * 188 * 8 * 1000) / delta_ms);
-            status->ts_useful_bitrate = (uint32_t)(((uint64_t)(bitrate_packet_total - bitrate_packet_null) * 188 * 8 * 1000) / delta_ms);
+            status->ts_total_bitrate = longmynd_ts_bitrate_bps(bitrate_packet_total, delta_ms);
+            status->ts_useful_bitrate = longmynd_ts_bitrate_bps(bitrate_packet_total - bitrate_packet_null, delta_ms);
+            if(bitrate_packet_total > 0)
+            {
+                status->ts_null_percentage = (100 * bitrate_packet_null) / bitrate_packet_total;
+                null_pct_10 = (1000 * bitrate_packet_null) / bitrate_packet_total;
+            }
 
             /* Calculate occupancy for each identified stream */
-            if (pid_counts != NULL) {
+            if (pid_counts != NULL && bitrate_packet_total > 0) {
                 uint32_t identified_occupancy = 0;
                 for (int i = 0; i < NUM_ELEMENT_STREAMS; i++) {
                     if (status->ts_elementary_streams[i][0] > 0) {
@@ -760,7 +854,6 @@ void *loop_ts_parse(void *arg) {
                 
                 /* Calculate Overhead: Total - Null - Identified */
                 uint32_t total_pct_10 = 1000;
-                uint32_t null_pct_10 = status->ts_null_percentage * 10;
                 if (total_pct_10 > (null_pct_10 + identified_occupancy)) {
                     status->ts_overhead_percentage = total_pct_10 - null_pct_10 - identified_occupancy;
                 } else {
@@ -778,11 +871,6 @@ void *loop_ts_parse(void *arg) {
         }
 
         pthread_mutex_lock(&status->mutex);
-
-        if(ts_packet_total_count > 0)
-        {
-            status->ts_null_percentage = (100 * ts_packet_null_count) / ts_packet_total_count;
-        }
 
         /* Trigger pthread signal */
         pthread_cond_signal(&status->signal);

@@ -22,8 +22,11 @@
 #ifndef TS_H
 #define TS_H
 
+#define LONGMYND_TS_PACKET_SIZE 188
+#define LONGMYND_TS_HEADER_SYNC 0x47
+#define LONGMYND_TS_MAX_PID 8192
+
 void *loop_ts(void *arg);
 void *loop_ts_parse(void *arg);
 
 #endif
-
