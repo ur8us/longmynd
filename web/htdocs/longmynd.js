@@ -22,6 +22,11 @@ var vlc_control_autoreset_endpoint = "127.0.0.1:8082";
 var vlc_control_password = "";
 
 var lo_frequency = 9360000;
+var low_sr_mode = 0;
+
+var LOW_SR_MODE_AUTO = 0;
+var LOW_SR_MODE_ON = 1;
+var LOW_SR_MODE_OFF = 2;
 
 var tuning_mode_scan = false;
 var scan_signals_index = 0;
@@ -173,6 +178,32 @@ function longmynd_udpts(_udp_host, _udp_port) {
   reset_vlc_stream();
 }
 
+function set_low_sr_buttons(_mode, _active) {
+  var buttons = {};
+  buttons[LOW_SR_MODE_AUTO] = $("#button-low-sr-auto");
+  buttons[LOW_SR_MODE_ON] = $("#button-low-sr-on");
+  buttons[LOW_SR_MODE_OFF] = $("#button-low-sr-off");
+
+  for (var key in buttons) {
+    buttons[key].removeClass("active");
+    buttons[key].find("input").prop("checked", false);
+  }
+
+  if (buttons[_mode] !== undefined) {
+    buttons[_mode].addClass("active");
+    buttons[_mode].find("input").prop("checked", true);
+  }
+
+  $("#span-low-sr-active").text(_active ? "on" : "off");
+}
+
+function longmynd_low_sr(_mode) {
+  low_sr_mode = _mode;
+  set_low_sr_buttons(_mode, _mode !== LOW_SR_MODE_OFF);
+  ws_control.sendMessage("L" + _mode);
+  reset_vlc_stream();
+}
+
 function is_valid_vlc_endpoint(_value) {
   var match = _value.match(
     /^((1?\d?\d|25[0-5]|2[0-4]\d)\.){3}(1?\d?\d|25[0-5]|2[0-4]\d)(:[1-9]\d{0,4})?$/,
@@ -294,6 +325,11 @@ function longmynd_render_status(data_json) {
         format_frequency_mhz(rx_status.frequency + lo_frequency - lo_frequency),
       );
       $("#span-status-symbolrate").text(rx_status.symbolrate / 1000.0 + "KS");
+
+      if (rx_status.low_sr_mode !== undefined) {
+        low_sr_mode = Math.round(rx_status.low_sr_mode);
+        set_low_sr_buttons(low_sr_mode, rx_status.low_sr_active === true);
+      }
 
       if (rx_status.rfport == 0) {
         $("#button-port-bottom").removeClass("active");
@@ -581,6 +617,16 @@ $(document).ready(function () {
   });
   $("#button-port-bottom").click(function () {
     longmynd_rfport(1);
+  });
+
+  $("#button-low-sr-auto").click(function () {
+    longmynd_low_sr(LOW_SR_MODE_AUTO);
+  });
+  $("#button-low-sr-on").click(function () {
+    longmynd_low_sr(LOW_SR_MODE_ON);
+  });
+  $("#button-low-sr-off").click(function () {
+    longmynd_low_sr(LOW_SR_MODE_OFF);
   });
 
   $("#button-udpts-submit").click(function () {

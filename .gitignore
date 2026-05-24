@@ -4,7 +4,12 @@
 *.d
 longmynd
 fake_read
+tests/test_ts_stats
 CHATHISTORY.md
+LOCAL_CONVERSATION.md
 __pycache__/
 *.pyc
 local-test/
+# Runtime screenshot captures; keep scripts/ itself tracked.
+scripts/screenshots/
+scripts/screenshots-by-callsign/

@@ -25,6 +25,11 @@ module use the STV0903 demodulator and STB6100 tuner path:
 
 `-N eardatek` is also accepted as an alias.
 
+EARDA Low SR handling is controlled with `-L auto|on|off` or from the web UI.
+Auto keeps the STV0903 low-symbol-rate scan setup enabled up to `6500 kS/s`
+and disables it above that. Signals below `180 kS/s` always force Low SR on;
+signals above `6500 kS/s` always force it off.
+
 ## Running for QO-100 with LO 9360000 kHz
 
 The frequency argument passed to longmynd is the tuner IF frequency in kHz,
@@ -102,6 +107,13 @@ demonstrates a working setup.
 QO-100 DATV band sweep scripts and example reception reports are in
 `QO-100-test/`. They use the same `9360000 kHz` LO by default and record
 status/C/N/error data without writing video.
+
+Additional QO-100 helper scripts are in `scripts/`. They can read the BATC
+wideband spectrum monitor to list active DATV signals and can rotate LongMynd
+through the detected stations to save PNG video screenshots:
+
+    scripts/find_qo100_stations.sh
+    scripts/capture_qo100_screens.sh --group-by-callsign
 
 With the current EARDA/Eardatek status path, status ID `12` is a demodulator
 C/N estimate in `dB * 10`. On the QO-100 beacon this setup now reports about
@@ -207,6 +219,8 @@ A video player (e.g. VLC) must be running to consume the output of the TS FIFO.
     25  LNB H Polarisation  1 if LNB Voltage Supply is configured for Horizontal Polarisation (18V), 0 otherwise (LNB Voltage Supply requires add-on board)
     26  AGC1 Gain           Demodulator AGC1 gain value
     27  AGC2 Gain           Demodulator AGC2 gain value
+    28  Low SR Mode         0 auto, 1 on, 2 off
+    29  Low SR Active       1 if EARDA/STV0903 Low SR scan setup is active, 0 otherwise
 
 
 ### MODCOD Lookup

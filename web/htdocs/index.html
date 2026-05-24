@@ -13,7 +13,7 @@
         <script src="lib/bootstrap-4.6.1/js/bootstrap.bundle.min.js"></script>
         <script src="/lib/strWebsocket.js?v=0"></script>
         <script src="longmynd-lookups.js?v=1"></script>
-        <script src="index.js?v=3"></script>
+        <script src="index.js?v=4"></script>
         <script src="constellation.js?v=1"></script>
     </head>
     <body>
@@ -78,6 +78,35 @@
                                     id="input-symbolrate"
                                     placeholder="Enter symbolrate"
                                 />
+                            </div>
+                            <div class="form-group">
+                                <label>Low SR</label>
+                                <div
+                                    class="btn-group btn-group-toggle d-flex"
+                                    data-toggle="buttons"
+                                >
+                                    <label
+                                        class="btn btn-sm btn-secondary active"
+                                        id="button-low-sr-auto"
+                                    >
+                                        <input type="radio" checked /> Auto
+                                    </label>
+                                    <label
+                                        class="btn btn-sm btn-secondary"
+                                        id="button-low-sr-on"
+                                    >
+                                        <input type="radio" /> On
+                                    </label>
+                                    <label
+                                        class="btn btn-sm btn-secondary"
+                                        id="button-low-sr-off"
+                                    >
+                                        <input type="radio" /> Off
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">
+                                    Active: <span id="span-low-sr-active">auto</span>
+                                </small>
                             </div>
                             <button
                                 type="submit"

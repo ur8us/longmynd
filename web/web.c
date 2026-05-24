@@ -359,6 +359,14 @@ int callback_ws(struct lws *wsi, enum lws_callback_reasons reason, void *user, v
                             rfport_index = (int)strtol(&message_string[1],NULL,10);
                             config_set_rfport(rfport_index);
                         }
+                        else if(message_string[0] == 'L')
+                        {
+                            /* Low SR mode Command: 0=auto, 1=on, 2=off */
+                            uint8_t low_sr_mode;
+
+                            low_sr_mode = (uint8_t)strtol(&message_string[1],NULL,10);
+                            config_set_low_sr_mode(low_sr_mode);
+                        }
                     }
                 }
             }
@@ -455,6 +463,9 @@ static void web_status_json(char **status_string_ptr, longmynd_status_t *status,
 
     json_object_object_add(statusPacketRxObj, "symbolrate", json_object_new_double((double)status_cache->symbolrate));
     json_object_object_add(statusPacketRxObj, "symbolrate_requested", json_object_new_double((double)status_cache->symbolrate_requested));
+
+    json_object_object_add(statusPacketRxObj, "low_sr_mode", json_object_new_double((double)status_cache->low_sr_mode));
+    json_object_object_add(statusPacketRxObj, "low_sr_active", json_object_new_boolean(status_cache->low_sr_active));
 
     json_object_object_add(statusPacketRxObj, "vber", json_object_new_double((double)status_cache->viterbi_error_rate));
 

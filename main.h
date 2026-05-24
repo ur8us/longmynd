@@ -62,6 +62,8 @@
 #define STATUS_LNB_POLARISATION_H 25
 #define STATUS_AGC1_GAIN          26
 #define STATUS_AGC2_GAIN          27
+#define STATUS_LOW_SR_MODE        28
+#define STATUS_LOW_SR_ACTIVE      29
 
 /* The number of constellation peeks we do for each background loop */
 #define NUM_CONSTELLATIONS 16
@@ -78,6 +80,7 @@ typedef struct {
     uint8_t demod;
     uint32_t freq_requested;
     uint32_t sr_requested;
+    uint8_t low_sr_mode;
     uint8_t tuner_gain;
     bool beep_enabled;
 
@@ -125,6 +128,8 @@ typedef struct {
     uint32_t frequency_requested;
     int32_t frequency_offset;
     uint32_t symbolrate_requested;
+    uint8_t low_sr_mode;
+    bool low_sr_active;
     bool polarisation_supply;
     bool polarisation_horizontal; // false -> 13V, true -> 18V
     uint32_t symbolrate;
@@ -179,5 +184,6 @@ void config_set_lnbv(bool enabled, bool horizontal);
 void config_set_udpts(char *udp_host, int udp_port);
 void config_set_rfport(int rfport_index);
 void config_set_gain(uint8_t gain);
+void config_set_low_sr_mode(uint8_t mode);
 
 #endif

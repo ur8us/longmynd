@@ -5,6 +5,9 @@ const ws_url =
 const DEFAULT_LO_FREQUENCY_KHZ = 9360000;
 const QO100_BEACON_FREQUENCY_KHZ = 10491500;
 const QO100_BEACON_SYMBOLRATE_KS = 1500;
+const LOW_SR_MODE_AUTO = 0;
+const LOW_SR_MODE_ON = 1;
+const LOW_SR_MODE_OFF = 2;
 
 let ws_monitor_buffer = [];
 let ws_control_buffer = [];
@@ -19,7 +22,34 @@ let render_interval = 100;
 let rx_status = null;
 let ts_status = null;
 let lo_frequency = DEFAULT_LO_FREQUENCY_KHZ;
+let low_sr_mode = LOW_SR_MODE_AUTO;
 let config_initialized = false;
+
+function set_low_sr_buttons(mode, active) {
+  const buttons = {
+    [LOW_SR_MODE_AUTO]: $("#button-low-sr-auto"),
+    [LOW_SR_MODE_ON]: $("#button-low-sr-on"),
+    [LOW_SR_MODE_OFF]: $("#button-low-sr-off"),
+  };
+
+  for (const key in buttons) {
+    buttons[key].removeClass("active");
+    buttons[key].find("input").prop("checked", false);
+  }
+
+  if (buttons[mode] !== undefined) {
+    buttons[mode].addClass("active");
+    buttons[mode].find("input").prop("checked", true);
+  }
+
+  $("#span-low-sr-active").text(active ? "on" : "off");
+}
+
+function send_low_sr_mode(mode) {
+  low_sr_mode = mode;
+  set_low_sr_buttons(mode, mode !== LOW_SR_MODE_OFF);
+  ws_control.sendMessage("L" + mode);
+}
 
 function load_settings() {
   if (typeof Storage === "undefined") {
@@ -74,6 +104,16 @@ $(document).ready(function () {
     $("#input-symbolrate").val(QO100_BEACON_SYMBOLRATE_KS);
   });
 
+  $("#button-low-sr-auto").click(function () {
+    send_low_sr_mode(LOW_SR_MODE_AUTO);
+  });
+  $("#button-low-sr-on").click(function () {
+    send_low_sr_mode(LOW_SR_MODE_ON);
+  });
+  $("#button-low-sr-off").click(function () {
+    send_low_sr_mode(LOW_SR_MODE_OFF);
+  });
+
   $("#input-frequency-lo").keyup(function () {
     const input_lo_frequency = parseInt($("#input-frequency-lo").val(), 10);
 
@@ -121,6 +161,11 @@ $(document).ready(function () {
             $("#input-symbolrate").val(rx_status.symbolrate_requested);
           }
           config_initialized = true;
+        }
+
+        if (rx_status.low_sr_mode !== undefined) {
+          low_sr_mode = Math.round(rx_status.low_sr_mode);
+          set_low_sr_buttons(low_sr_mode, rx_status.low_sr_active === true);
         }
 
         let rflevel_dbm = rflevel_lookupfn(rx_status.agc1, rx_status.agc2);

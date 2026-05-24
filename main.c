@@ -190,6 +190,19 @@ void config_set_gain(uint8_t gain)
     pthread_mutex_unlock(&longmynd_config.mutex);
 }
 
+void config_set_low_sr_mode(uint8_t mode)
+{
+    if (mode <= STV0903_LOW_SR_OFF)
+    {
+        pthread_mutex_lock(&longmynd_config.mutex);
+
+        longmynd_config.low_sr_mode = mode;
+        longmynd_config.new = true;
+
+        pthread_mutex_unlock(&longmynd_config.mutex);
+    }
+}
+
 /* -------------------------------------------------------------------------------------------------- */
 uint64_t monotonic_ms(void) {
 /* -------------------------------------------------------------------------------------------------- */
@@ -239,6 +252,7 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
     config->vlc_port = 8082;
     config->vlc_password[0] = '\0';
     config->tuner_gain = 0;
+    config->low_sr_mode = STV0903_LOW_SR_AUTO;
     char polarisation_str[8];
     char nim_str[16];
 
@@ -310,6 +324,18 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
                 break;
             case 'O':
                 config->vlc_port=(int)strtol(argv[param],NULL,10);
+                break;
+            case 'L':
+                if (0 == strcasecmp("auto", argv[param]) || 0 == strcmp("0", argv[param])) {
+                    config->low_sr_mode = STV0903_LOW_SR_AUTO;
+                } else if (0 == strcasecmp("on", argv[param]) || 0 == strcmp("1", argv[param])) {
+                    config->low_sr_mode = STV0903_LOW_SR_ON;
+                } else if (0 == strcasecmp("off", argv[param]) || 0 == strcmp("2", argv[param])) {
+                    config->low_sr_mode = STV0903_LOW_SR_OFF;
+                } else {
+                    err=ERROR_ARGS_INPUT;
+                    printf("ERROR: Low SR mode must be auto, on, or off\n");
+                }
                 break;
           }
         }
@@ -386,6 +412,10 @@ uint8_t process_command_line(int argc, char *argv[], longmynd_config_t *config) 
               printf("              NIM model=%s\n", config->nim_model == NIM_MODEL_EARDATEK ? "EARDA/Eardatek EDS-4B47FF1B+ STV0903/STB6100" : "Serit STV0910/STV6120");
               if (config->tuner_gain > 0) printf("              Tuner gain=%u\n", config->tuner_gain);
               else                         printf("              Tuner gain=auto (SR-based)\n");
+              printf("              Low SR mode=%s%s\n",
+                  config->low_sr_mode == STV0903_LOW_SR_ON ? "on" :
+                  (config->low_sr_mode == STV0903_LOW_SR_OFF ? "off" : "auto"),
+                  config->nim_model == NIM_MODEL_EARDATEK ? "" : " (EARDA only)");
              if (config->port_swap)   printf("              NIM inputs are swapped (Main now refers to BOTTOM F-Type\n");
              else                     printf("              Main refers to TOP F-Type\n");
              if (config->beep_enabled) printf("              MER Beep enabled\n");
@@ -517,6 +547,9 @@ void *loop_i2c(void *arg) {
 
         status_cpy.frequency_requested = config_cpy.freq_requested;
         status_cpy.symbolrate_requested = config_cpy.sr_requested;
+        status_cpy.low_sr_mode = config_cpy.low_sr_mode;
+        status_cpy.low_sr_active = config_cpy.nim_model == NIM_MODEL_EARDATEK
+            && stv0903_low_sr_effective(config_cpy.low_sr_mode, config_cpy.sr_requested);
         status_cpy.demod = config_cpy.demod;
         status_cpy.nim_model = config_cpy.nim_model;
         status_cpy.rfport_index = config_cpy.port_swap ? 1 : 0;
@@ -539,7 +572,7 @@ void *loop_i2c(void *arg) {
                 if (*err==ERROR_NONE) *err=nim_probe_demod_addrs(eardatek_addrs, sizeof(eardatek_addrs));
                 if (*err==ERROR_NONE) printf("      Status: Eardatek demod I2C address=0x%.2x\n", nim_get_demod_addr());
                 if (*err==ERROR_NONE) *err=nim_init();
-                if (*err==ERROR_NONE) *err=stv0903_init(config_cpy.sr_requested);
+                if (*err==ERROR_NONE) *err=stv0903_init(config_cpy.sr_requested, config_cpy.low_sr_mode);
                 if (*err==ERROR_NONE) {
                     const uint8_t stb6100_addrs[] = {
                         NIM_TUNER_ADDR_STB6100_0,
@@ -718,6 +751,8 @@ void *loop_i2c(void *arg) {
         status->frequency_requested = status_cpy.frequency_requested;
         status->frequency_offset = status_cpy.frequency_offset;
         status->symbolrate_requested = status_cpy.symbolrate_requested;
+        status->low_sr_mode = status_cpy.low_sr_mode;
+        status->low_sr_active = status_cpy.low_sr_active;
         status->polarisation_supply = status_cpy.polarisation_supply;
         status->polarisation_horizontal = status_cpy.polarisation_horizontal;
         status->symbolrate = status_cpy.symbolrate;
@@ -816,6 +851,9 @@ uint8_t status_all_write(longmynd_status_t *status, uint8_t (*status_write)(uint
     if (err==ERROR_NONE) err=status_write(STATUS_SHORT_FRAME, status->short_frame);
     /* Pilots */
     if (err==ERROR_NONE) err=status_write(STATUS_PILOTS, status->pilots);
+    /* Low SR selected mode and effective state */
+    if (err==ERROR_NONE) err=status_write(STATUS_LOW_SR_MODE, status->low_sr_mode);
+    if (err==ERROR_NONE) err=status_write(STATUS_LOW_SR_ACTIVE, status->low_sr_active);
 
     return err;
 }
@@ -852,6 +890,9 @@ int main(int argc, char *argv[]) {
         longmynd_status.rfport_index = longmynd_config.port_swap ? 1 : 0;
         longmynd_status.frequency_requested = longmynd_config.freq_requested;
         longmynd_status.symbolrate_requested = longmynd_config.sr_requested;
+        longmynd_status.low_sr_mode = longmynd_config.low_sr_mode;
+        longmynd_status.low_sr_active = longmynd_config.nim_model == NIM_MODEL_EARDATEK
+            && stv0903_low_sr_effective(longmynd_config.low_sr_mode, longmynd_config.sr_requested);
         longmynd_status.polarisation_supply = longmynd_config.polarisation_supply;
         longmynd_status.polarisation_horizontal = longmynd_config.polarisation_horizontal;
         longmynd_status.tuner_gain = longmynd_config.tuner_gain;

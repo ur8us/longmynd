@@ -45,6 +45,8 @@
 
 static uint32_t stv0903_mclk_hz = STV0903_MCLK;
 static uint32_t stv0903_sr_khz = 0;
+static uint8_t stv0903_low_sr_mode = STV0903_LOW_SR_AUTO;
+static bool stv0903_low_sr_active = false;
 
 typedef struct {
     uint16_t reg;
@@ -251,6 +253,20 @@ static uint8_t stv0903_setup_cfr_range(uint32_t sr_khz) {
     return err;
 }
 
+bool stv0903_low_sr_effective(uint8_t mode, uint32_t sr)
+{
+    if (sr < STV0903_LOW_SR_FORCE_ON_KS) {
+        return true;
+    }
+    if (sr > STV0903_LOW_SR_FORCE_OFF_KS) {
+        return false;
+    }
+    if (mode == STV0903_LOW_SR_OFF) {
+        return false;
+    }
+    return true;
+}
+
 static uint8_t stv0903_setup_low_sr_scan(uint32_t sr_khz) {
     uint8_t err=ERROR_NONE;
     uint16_t sym;
@@ -407,8 +423,15 @@ uint8_t stv0903_start_s2_scan(void) {
 
     printf("Flow: STV0903 start DVB-S2 scan\n");
 
-    if (err==ERROR_NONE) err = stv0903_setup_low_sr_scan(stv0903_sr_khz);
-    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CORRELABS, stv0903_sr_khz > 5000 ? 0x9e : 0x82);
+    stv0903_low_sr_active = stv0903_low_sr_effective(stv0903_low_sr_mode, stv0903_sr_khz);
+    printf("      Status: STV0903 Low SR %s (mode=%u, SR=%u KS/s)\n",
+        stv0903_low_sr_active ? "enabled" : "disabled",
+        stv0903_low_sr_mode,
+        stv0903_sr_khz);
+
+    if (stv0903_low_sr_active && err==ERROR_NONE) err = stv0903_setup_low_sr_scan(stv0903_sr_khz);
+    if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_CORRELABS,
+        stv0903_low_sr_active ? (stv0903_sr_khz > 5000 ? 0x9e : 0x82) : 0x8c);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_DMDCFGMD, STV0903_DVBS2_COLD_SEARCH);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_DMDISTATE, 0x1f);
     if (err==ERROR_NONE) err = stv0910_write_reg(RSTV0910_P1_DMDISTATE, STV0910_SCAN_BLIND_BEST_GUESS);
@@ -461,11 +484,13 @@ uint8_t stv0903_reset_ts(void) {
     return err;
 }
 
-uint8_t stv0903_init(uint32_t sr) {
+uint8_t stv0903_init(uint32_t sr, uint8_t low_sr_mode) {
     uint8_t err=ERROR_NONE;
 
     printf("Flow: STV0903 init\n");
     stv0903_sr_khz = sr;
+    stv0903_low_sr_mode = low_sr_mode;
+    stv0903_low_sr_active = stv0903_low_sr_effective(stv0903_low_sr_mode, stv0903_sr_khz);
 
     if (err==ERROR_NONE) err = stv0903_init_regs();
     if (err==ERROR_NONE) err = stv0903_set_mclk();
