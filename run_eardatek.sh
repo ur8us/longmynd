@@ -25,14 +25,17 @@ VLC_PASSWORD="longmynd"
 VLC_HTTP_PORT=8082
 LONGMYND_WEB_PORT=8080
 
-# Stop existing instances and wait only if something is still exiting.
-pkill -x longmynd 2>/dev/null
-pkill -f "/snap/vlc" 2>/dev/null
-pkill -x vlc 2>/dev/null
+cleanup() {
+    pkill -9 -x longmynd 2>/dev/null
+    pkill -9 -x vlc 2>/dev/null
+    pkill -9 -f "/snap/vlc" 2>/dev/null
+}
+trap cleanup EXIT
+
+cleanup
 
 for _ in {1..20}; do
     if ! pgrep -x longmynd >/dev/null 2>&1 \
-        && ! pgrep -x vlc >/dev/null 2>&1 \
         && ! pgrep -f "/snap/vlc" >/dev/null 2>&1; then
         break
     fi
