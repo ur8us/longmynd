@@ -270,14 +270,41 @@ def cleanup_empty_group_dir(args: argparse.Namespace, output: Path) -> None:
         pass
 
 
+def drain_status_socket(sock: socket.socket, seconds: float) -> Dict[int, str]:
+    status: Dict[int, str] = {}
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        remaining = max(0.0, deadline - time.monotonic())
+        readable, _, _ = select.select([sock], [], [], min(0.25, remaining))
+        if readable:
+            packet, _addr = sock.recvfrom(8192)
+            update_status(status, packet)
+    return status
+
+
+def write_csv_sigreport(csv_path: Path, result: dict) -> None:
+    ts = result.get("timestamp", datetime.now().strftime("%Y%m%d-%H%M%S"))
+    service = result.get("service_name", "Unknown")
+    provider = result.get("service_provider_name", "")
+    modcod = result.get("modcod", "?")
+    cn = result.get("cn_db", "?")
+    sr = result.get("symbol_rate_ks", "?")
+    freq = result.get("downlink_khz", "?")
+    callsign_part = re.sub(r"[^A-Za-z0-9_.+-]+", "_", service).strip("_.-")[:48] or "Unknown"
+    line = f"{ts} ScanSigReport: {callsign_part}/{provider} - {modcod} - ({cn} dB) - {sr} - {freq}\n"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with csv_path.open("a", encoding="utf-8") as f:
+            f.write(line)
+    except OSError:
+        pass
+
+
 def tune_and_capture(station: dict, args: argparse.Namespace, cycle_started: datetime) -> dict:
     downlink_khz = int(station["downlink_khz"])
     symbol_rate_ks = int(station["symbol_rate_ks"])
     if_khz = downlink_khz - args.lo_khz
     args.screenshot_dir.mkdir(parents=True, exist_ok=True)
-    log_dir = args.screenshot_dir / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"{cycle_started.strftime('%Y%m%d-%H%M%S')}-dl{downlink_khz}-sr{symbol_rate_ks}.log"
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -298,7 +325,18 @@ def tune_and_capture(station: dict, args: argparse.Namespace, cycle_started: dat
         cmd += ["-L", args.low_sr]
     cmd += [str(if_khz), str(symbol_rate_ks)]
 
-    with log_file.open("w", encoding="utf-8") as log_handle:
+    if args.quiet:
+        process = subprocess.Popen(
+            cmd,
+            cwd=args.repo_root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        log_dir = args.screenshot_dir / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{cycle_started.strftime('%Y%m%d-%H%M%S')}-dl{downlink_khz}-sr{symbol_rate_ks}.log"
+        log_handle = log_file.open("w", encoding="utf-8")
         log_handle.write("$ " + " ".join(cmd) + "\n\n")
         log_handle.flush()
         process = subprocess.Popen(
@@ -308,42 +346,51 @@ def tune_and_capture(station: dict, args: argparse.Namespace, cycle_started: dat
             stderr=subprocess.STDOUT,
             text=True,
         )
-        try:
-            status = wait_for_status(sock, process, args.lock_wait)
-            summary = status_summary(status)
-            locked = summary["state"] in (3, 4)
-            service = safe_token(summary["service_name"], f"DL{downlink_khz}")
-            output = screenshot_output_path(args, service, symbol_rate_ks)
-            captured = False
-            if locked:
-                captured = ffmpeg_screenshot(
-                    args.ts_host,
-                    args.ts_port,
-                    output,
-                    args.capture_timeout,
-                    args.capture_attempts,
-                    args.capture_retry_sleep,
-                    args.min_detail_stddev,
-                )
-            if not captured and output.exists():
-                output.unlink()
-            if not captured:
-                cleanup_empty_group_dir(args, output)
-            result = {
-                "downlink_khz": downlink_khz,
-                "if_khz": if_khz,
-                "symbol_rate_ks": symbol_rate_ks,
-                "locked": locked,
-                "captured": captured,
-                "screenshot": str(output) if captured else "",
-                "log_file": str(log_file),
-                **summary,
-            }
-            print(json.dumps(result, sort_keys=True), flush=True)
-            return result
-        finally:
-            stop_process(process)
-            sock.close()
+
+    try:
+        status = wait_for_status(sock, process, args.lock_wait)
+        summary = status_summary(status)
+        locked = summary["state"] in (3, 4)
+        service = safe_token(summary["service_name"], f"DL{downlink_khz}")
+        output = screenshot_output_path(args, service, symbol_rate_ks)
+        captured = False
+        if locked:
+            captured = ffmpeg_screenshot(
+                args.ts_host,
+                args.ts_port,
+                output,
+                args.capture_timeout,
+                args.capture_attempts,
+                args.capture_retry_sleep,
+                args.min_detail_stddev,
+            )
+            if captured:
+                fresh_status = drain_status_socket(sock, 0.5)
+                summary.update(status_summary(fresh_status))
+                summary["service_name"] = fresh_status.get(13, "") or summary.get("service_name", "")
+                summary["service_provider_name"] = fresh_status.get(14, "") or summary.get("service_provider_name", "")
+        if not captured and output.exists():
+            output.unlink()
+        if not captured:
+            cleanup_empty_group_dir(args, output)
+        result = {
+            "downlink_khz": downlink_khz,
+            "if_khz": if_khz,
+            "symbol_rate_ks": symbol_rate_ks,
+            "locked": locked,
+            "captured": captured,
+            "screenshot": str(output) if captured else "",
+            "timestamp": cycle_started.strftime("%Y%m%d-%H%M%S"),
+            **summary,
+        }
+        print(json.dumps(result, sort_keys=True), flush=True)
+        if captured and args.csv_sigreports:
+            csv_path = args.screenshot_dir / f"{service}.csv"
+            write_csv_sigreport(csv_path, result)
+        return result
+    finally:
+        stop_process(process)
+        sock.close()
 
 
 def discover(args: argparse.Namespace) -> List[dict]:
@@ -431,6 +478,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--status-port", type=int, default=DEFAULT_STATUS_PORT)
     parser.add_argument("--screenshot-dir", type=Path, help="screenshot output root")
     parser.add_argument("--group-by-callsign", action="store_true", help="write PNGs under screenshots-by-callsign/<callsign>/ by default")
+    parser.add_argument("--quiet", action="store_true", help="suppress longmynd log files and stdout")
+    parser.add_argument("--csv-sigreports", action="store_true", help="append per-callsign CSV sigreports")
     parser.add_argument("--scan-seconds", type=float, default=6.0)
     parser.add_argument("--lock-wait", type=float, default=14.0)
     parser.add_argument("--capture-timeout", type=float, default=25.0)
