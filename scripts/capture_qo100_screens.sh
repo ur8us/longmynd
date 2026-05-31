@@ -2,4 +2,6 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec python3 "$SCRIPT_DIR/qo100_capture_screens.py" "$@"
+exec python3 "$SCRIPT_DIR/qo100_capture_screens.py" \
+    --no-beacon \
+    "$@"
