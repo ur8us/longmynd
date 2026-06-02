@@ -20,6 +20,9 @@ var render_interval = 100;
 var vlc_control_autoreset = true;
 var vlc_control_autoreset_endpoint = "127.0.0.1:8082";
 var vlc_control_password = "";
+var vlc_stream_signature = null;
+var vlc_last_reset_timestamp = 0;
+var VLC_RESET_COOLDOWN_MS = 4000;
 
 var lo_frequency = 9360000;
 var low_sr_mode = 0;
@@ -93,6 +96,92 @@ var mpeg_type_lookup = {
   129: "AC3 Audio",
 };
 
+function ts_pid_type_is_video(_type) {
+  return [1, 2, 16, 27, 33, 36].indexOf(_type) >= 0;
+}
+
+function ts_pid_type_is_audio(_type) {
+  return [3, 4, 15, 17, 129].indexOf(_type) >= 0;
+}
+
+function build_vlc_stream_signature(_ts_status) {
+  var audio_types = [];
+  var video_types = [];
+  var i;
+
+  if (_ts_status == null || _ts_status.PIDs == null) {
+    return null;
+  }
+
+  for (i = 0; i < _ts_status.PIDs.length; i++) {
+    var pid = _ts_status.PIDs[i];
+    var pid_num = pid[0];
+    var pid_type = pid[1];
+
+    if (pid_num < 0) {
+      continue;
+    }
+
+    if (ts_pid_type_is_video(pid_type) && video_types.indexOf(pid_type) < 0) {
+      video_types.push(pid_type);
+    }
+
+    if (ts_pid_type_is_audio(pid_type) && audio_types.indexOf(pid_type) < 0) {
+      audio_types.push(pid_type);
+    }
+  }
+
+  if (video_types.length < 1 && audio_types.length < 1) {
+    return null;
+  }
+
+  video_types.sort(function (a, b) {
+    return a - b;
+  });
+  audio_types.sort(function (a, b) {
+    return a - b;
+  });
+
+  return "v=" + video_types.join(",") + ";a=" + audio_types.join(",");
+}
+
+function update_vlc_stream_signature(_rx_status, _ts_status) {
+  var new_signature;
+  var now;
+
+  if (_rx_status == null || _rx_status.demod_state < 3) {
+    return;
+  }
+
+  new_signature = build_vlc_stream_signature(_ts_status);
+  if (new_signature == null) {
+    return;
+  }
+
+  if (vlc_stream_signature == null) {
+    vlc_stream_signature = new_signature;
+    return;
+  }
+
+  if (vlc_stream_signature !== new_signature) {
+    now = Date.now();
+    if (
+      vlc_control_autoreset &&
+      is_valid_vlc_endpoint(vlc_control_autoreset_endpoint) &&
+      now - vlc_last_reset_timestamp >= VLC_RESET_COOLDOWN_MS
+    ) {
+      console.log(
+        "Resetting VLC after stream signature change:",
+        vlc_stream_signature,
+        "->",
+        new_signature,
+      );
+      reset_vlc_stream();
+    }
+    vlc_stream_signature = new_signature;
+  }
+}
+
 function format_frequency_mhz(_frequency_khz) {
   return (_frequency_khz / 1000.0).toFixed(3) + " MHz";
 }
@@ -144,6 +233,7 @@ function reset_vlc_stream() {
   /* Send reset command through LongMynd's WebSocket control channel.
      The C code makes the HTTP requests to VLC server-side, avoiding
      browser CORS issues. */
+  vlc_last_reset_timestamp = Date.now();
   ws_control.sendMessage("R");
 }
 
@@ -463,6 +553,8 @@ function longmynd_render_status(data_json) {
           .text(text)
           .appendTo($("#div-ts-pids"));
       }
+
+      update_vlc_stream_signature(rx_status, ts_status);
 
       $("#progressbar-density")
         .css("width", 100.0 - ts_status.null_ratio + "%")
